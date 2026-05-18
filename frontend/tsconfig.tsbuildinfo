@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/components/bookdetail.tsx","./src/components/booklist.tsx","./src/components/chunkcard.tsx","./src/components/glossarypanel.tsx","./src/components/modelpicker.tsx","./src/components/uploadform.tsx"],"version":"5.9.3"}
