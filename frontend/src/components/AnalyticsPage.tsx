@@ -64,7 +64,7 @@ export function AnalyticsPage({ book, chunks }: Props) {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-bold tracking-tight">{book.title}</h2>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           {book.author ?? "Unknown author"} · Translation analytics
         </p>
       </div>
@@ -84,7 +84,7 @@ export function AnalyticsPage({ book, chunks }: Props) {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+          <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
             <div
               className="h-full bg-emerald-500 rounded-full transition-all duration-700"
               style={{ width: `${approvalPct}%` }}
@@ -150,7 +150,7 @@ export function AnalyticsPage({ book, chunks }: Props) {
         <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">
           Word count per chunk
         </h3>
-        <div className="flex items-end gap-px h-32 overflow-x-auto pb-1">
+        <div className="flex items-end gap-px h-48 overflow-x-auto pb-1">
           {chunks.map((c, i) => {
             const pct = (sourceCounts[i] / barMax) * 100;
             const color =
@@ -210,7 +210,7 @@ export function AnalyticsPage({ book, chunks }: Props) {
           <tbody className="divide-y divide-slate-50">
             {[...chunks]
               .sort((a, b) => wordCount(b.source_text) - wordCount(a.source_text))
-              .slice(0, 5)
+              .slice(0, 10)
               .map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50">
                   <td className="py-2 font-mono text-slate-600">#{c.sequence_number}</td>
