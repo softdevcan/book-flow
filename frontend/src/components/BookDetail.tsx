@@ -4,6 +4,9 @@ import type { Book, Chunk } from "../types";
 import { ModelPicker } from "./ModelPicker";
 import { GlossaryPanel } from "./GlossaryPanel";
 import { ChunkCard } from "./ChunkCard";
+import { AnalyticsPage } from "./AnalyticsPage";
+
+type ActiveView = "chunks" | "analytics";
 
 interface Props {
   bookId: number;
@@ -72,6 +75,7 @@ export function BookDetail({ bookId, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [activeChapterIdx, setActiveChapterIdx] = useState(0);
+  const [activeView, setActiveView] = useState<ActiveView>("chunks");
   const pollRef = useRef<number | null>(null);
 
   async function loadAll() {
@@ -140,31 +144,35 @@ export function BookDetail({ bookId, onBack }: Props) {
           ← Back to library
         </button>
         <div className="flex items-center gap-3 flex-wrap">
-          <ModelPicker selected={selectedModel} onChange={setSelectedModel} />
-          <button
-            onClick={translateAll}
-            disabled={translating || pendingCount === 0}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded px-3 py-1.5 flex items-center gap-1.5"
-          >
-            {translating && (
-              <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-            )}
-            {translating ? "Queuing…" : pendingCount > 0 ? `Translate ${pendingCount} pending` : "All translated"}
-          </button>
-          <button
-            onClick={() => exportAsTxt(book, chunks)}
-            disabled={translatedCount === 0}
-            title={translatedCount === 0 ? "No translations yet" : `Export ${translatedCount}/${chunks.length} chunks`}
-            className="border border-slate-300 hover:border-slate-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-sm rounded px-3 py-1.5"
-          >
-            ↓ Export TXT
-            {translatedCount > 0 && translatedCount < chunks.length && (
-              <span className="ml-1 text-xs text-amber-600">({translatedCount}/{chunks.length})</span>
-            )}
-          </button>
+          {activeView === "chunks" && (
+            <>
+              <ModelPicker selected={selectedModel} onChange={setSelectedModel} />
+              <button
+                onClick={translateAll}
+                disabled={translating || pendingCount === 0}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded px-3 py-1.5 flex items-center gap-1.5"
+              >
+                {translating && (
+                  <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                )}
+                {translating ? "Queuing…" : pendingCount > 0 ? `Translate ${pendingCount} pending` : "All translated"}
+              </button>
+              <button
+                onClick={() => exportAsTxt(book, chunks)}
+                disabled={translatedCount === 0}
+                title={translatedCount === 0 ? "No translations yet" : `Export ${translatedCount}/${chunks.length} chunks`}
+                className="border border-slate-300 hover:border-slate-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-sm rounded px-3 py-1.5"
+              >
+                ↓ Export TXT
+                {translatedCount > 0 && translatedCount < chunks.length && (
+                  <span className="ml-1 text-xs text-amber-600">({translatedCount}/{chunks.length})</span>
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -190,82 +198,106 @@ export function BookDetail({ bookId, onBack }: Props) {
         )}
       </div>
 
+      {/* View tabs */}
+      <div className="flex gap-1 border-b border-slate-200">
+        {(["chunks", "analytics"] as ActiveView[]).map((view) => (
+          <button
+            key={view}
+            onClick={() => setActiveView(view)}
+            className={`px-4 py-2 text-sm font-medium rounded-t transition-colors ${
+              activeView === view
+                ? "bg-white border border-b-white border-slate-200 -mb-px text-indigo-700"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {view === "chunks" ? "Chunks" : "Analytics"}
+          </button>
+        ))}
+      </div>
+
       {error && (
         <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       )}
 
-      {/* Main layout: sidebar + content */}
-      <div className="flex gap-6 items-start">
+      {/* Analytics view */}
+      {activeView === "analytics" && (
+        <AnalyticsPage book={book} chunks={chunks} />
+      )}
 
-        {/* Left sidebar: chapter list */}
-        <nav className="w-56 shrink-0 rounded-lg border border-slate-200 bg-white overflow-hidden sticky top-4">
-          <div className="px-3 py-2 border-b border-slate-100 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Chapters
-          </div>
-          <ul className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
-            {groups.map((g, i) => {
-              const st = chapterStatus(g);
-              const isActive = i === safeIdx;
-              return (
-                <li key={i}>
-                  <button
-                    onClick={() => setActiveChapterIdx(i)}
-                    className={`w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-slate-50 transition-colors ${isActive ? "bg-indigo-50 border-l-2 border-indigo-500" : ""}`}
-                  >
-                    <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${
-                      st === "all_approved" ? "bg-emerald-400" :
-                      st === "partial" ? "bg-indigo-400" :
-                      "bg-amber-300"
-                    }`} />
-                    <div>
-                      <div className={`text-sm leading-tight ${isActive ? "font-semibold text-indigo-700" : "text-slate-700"}`}>
-                        {g.title}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {g.chunks.length} chunk{g.chunks.length !== 1 ? "s" : ""}
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+      {/* Chunks view: sidebar + content */}
+      {activeView === "chunks" && (
+        <div className="flex gap-6 items-start">
 
-        {/* Right: active chapter chunks + glossary */}
-        <div className="flex-1 min-w-0 flex gap-6 items-start">
-          <section className="flex-1 min-w-0 space-y-4">
-            {activeGroup && (
-              <>
-                <div className="flex items-center justify-between">
-                  <h2 className="font-semibold text-slate-800">{activeGroup.title}</h2>
-                  <span className="text-xs text-slate-500">
-                    {activeGroup.chunks.filter((c) => c.translated_text).length}/{activeGroup.chunks.length} translated
-                  </span>
+          {/* Left sidebar: chapter list */}
+          <nav className="w-56 shrink-0 rounded-lg border border-slate-200 bg-white overflow-hidden sticky top-4">
+            <div className="px-3 py-2 border-b border-slate-100 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Chapters
+            </div>
+            <ul className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+              {groups.map((g, i) => {
+                const st = chapterStatus(g);
+                const isActive = i === safeIdx;
+                return (
+                  <li key={i}>
+                    <button
+                      onClick={() => setActiveChapterIdx(i)}
+                      className={`w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-slate-50 transition-colors ${isActive ? "bg-indigo-50 border-l-2 border-indigo-500" : ""}`}
+                    >
+                      <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${
+                        st === "all_approved" ? "bg-emerald-400" :
+                        st === "partial" ? "bg-indigo-400" :
+                        "bg-amber-300"
+                      }`} />
+                      <div>
+                        <div className={`text-sm leading-tight ${isActive ? "font-semibold text-indigo-700" : "text-slate-700"}`}>
+                          {g.title}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {g.chunks.length} chunk{g.chunks.length !== 1 ? "s" : ""}
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          {/* Right: active chapter chunks + glossary */}
+          <div className="flex-1 min-w-0 flex gap-6 items-start">
+            <section className="flex-1 min-w-0 space-y-4">
+              {activeGroup && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-semibold text-slate-800">{activeGroup.title}</h2>
+                    <span className="text-xs text-slate-500">
+                      {activeGroup.chunks.filter((c) => c.translated_text).length}/{activeGroup.chunks.length} translated
+                    </span>
+                  </div>
+                  {activeGroup.chunks.map((c) => (
+                    <ChunkCard
+                      key={c.id}
+                      chunk={c}
+                      onTranslate={() => translateOne(c.id)}
+                      onUpdate={(patch) => updateChunk(c.id, patch)}
+                    />
+                  ))}
+                </>
+              )}
+            </section>
+
+            <aside className="w-72 shrink-0 space-y-4 sticky top-4">
+              <GlossaryPanel bookId={bookId} />
+              {book.style_guide && (
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <h3 className="font-semibold mb-2 text-sm">Style guide</h3>
+                  <p className="text-sm whitespace-pre-wrap text-slate-700">{book.style_guide}</p>
                 </div>
-                {activeGroup.chunks.map((c) => (
-                  <ChunkCard
-                    key={c.id}
-                    chunk={c}
-                    onTranslate={() => translateOne(c.id)}
-                    onUpdate={(patch) => updateChunk(c.id, patch)}
-                  />
-                ))}
-              </>
-            )}
-          </section>
-
-          <aside className="w-72 shrink-0 space-y-4 sticky top-4">
-            <GlossaryPanel bookId={bookId} />
-            {book.style_guide && (
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <h3 className="font-semibold mb-2 text-sm">Style guide</h3>
-                <p className="text-sm whitespace-pre-wrap text-slate-700">{book.style_guide}</p>
-              </div>
-            )}
-          </aside>
+              )}
+            </aside>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
