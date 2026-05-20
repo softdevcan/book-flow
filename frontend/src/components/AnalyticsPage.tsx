@@ -110,10 +110,14 @@ export function AnalyticsPage({ book, chunks }: Props) {
       {/* Word stats */}
       <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
         <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Word statistics</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
             <p className="text-2xl font-bold text-slate-800">{totalSourceWords.toLocaleString()}</p>
             <p className="text-xs text-slate-500 mt-0.5">Total source words</p>
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-600">{translatedTargetWords.toLocaleString()}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Toplam çeviri yapılmış kelime</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-slate-800">{avgWords.toLocaleString()}</p>
@@ -150,7 +154,13 @@ export function AnalyticsPage({ book, chunks }: Props) {
         <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">
           Word count per chunk
         </h3>
-        <div className="flex items-end gap-px h-48 overflow-x-auto pb-1">
+        <div className="relative flex items-end gap-px h-48 overflow-x-auto pb-1">
+          {/* Ortalama Line */}
+          <div
+            className="absolute left-0 right-0 border-t border-dashed border-slate-600 opacity-70 pointer-events-none"
+            style={{ bottom: `${(avgWords / barMax) * 100}%` }}
+            title={`Ortalama: ${avgWords} kelime`}
+          />
           {chunks.map((c, i) => {
             const pct = (sourceCounts[i] / barMax) * 100;
             const color =
@@ -203,6 +213,7 @@ export function AnalyticsPage({ book, chunks }: Props) {
           <thead>
             <tr className="text-xs text-slate-400 uppercase tracking-wider border-b border-slate-100">
               <th className="text-left pb-2 font-medium">Chunk</th>
+              <th className="text-left pb-2 font-medium">Preview</th>
               <th className="text-right pb-2 font-medium">Words</th>
               <th className="text-right pb-2 font-medium">Status</th>
             </tr>
@@ -213,7 +224,10 @@ export function AnalyticsPage({ book, chunks }: Props) {
               .slice(0, 10)
               .map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="py-2 font-mono text-slate-600">#{c.sequence_number}</td>
+                  <td className="py-2 font-mono text-slate-800 pr-3">#{c.sequence_number}</td>
+                  <td className="py-2 text-slate-400 text-xs max-w-xs truncate pr-3">
+                    {c.source_text.trim().slice(0, 90)}…
+                  </td>
                   <td className="py-2 text-right font-medium">{wordCount(c.source_text).toLocaleString()}</td>
                   <td className="py-2 text-right">
                     <span className={`text-xs rounded-full px-2 py-0.5 ${
