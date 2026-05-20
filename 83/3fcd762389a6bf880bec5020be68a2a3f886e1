@@ -1,0 +1,21 @@
+frontend/src/components/GlossaryPanel.tsx
+  s_55e02251942d8a::t_87d30a493ba88f 17-25,27-34
+  s_55e02251942d8a::t_e0f801385f7f52 48,60
+  s_55e02251942d8a::t_df502a2b4ca64b 1-2,14-15,37-38,40,43-47,49-50,52-53,56-59,61-62,64-65,74-79,85-86,93-94,96-100,104,106-107,120-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "833fcd762389a6bf880bec5020be68a2a3f886e1",
+  "prompts": {},
+  "sessions": {
+    "s_55e02251942d8a": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f818ebf1-b5f7-41a4-984f-9034e046dd94",
+        "model": "composer-2"
+      },
+      "human_author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  }
+}
