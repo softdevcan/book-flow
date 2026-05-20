@@ -60,6 +60,11 @@ export function AnalyticsPage({ book, chunks }: Props) {
 
   const barMax = Math.max(...sourceCounts, 1);
 
+  // Son 10 chunk içinde kaçı onaylı — velocity göstergesi
+  const last10 = chunks.slice(-10);
+  const last10Approved = last10.filter((c) => c.status === "approved").length;
+  const velocityPct = Math.round((last10Approved / last10.length) * 100);
+
   return (
     <div className="space-y-6">
       <div>
@@ -105,6 +110,50 @@ export function AnalyticsPage({ book, chunks }: Props) {
         <StatusBadge label="In review" count={inReview} color="border-indigo-200 bg-indigo-50 text-indigo-800" />
         <StatusBadge label="Untranslated" count={raw} color="border-amber-200 bg-amber-50 text-amber-800" />
         <StatusBadge label="Failed" count={failed} color={failed > 0 ? "border-red-200 bg-red-50 text-red-800" : "border-slate-200 bg-slate-50 text-slate-400"} />
+      </div>
+
+      {/* Status distribution stacked bar */}
+      <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Status distribution</h3>
+        <div className="flex h-6 rounded-full overflow-hidden w-full">
+          {approved > 0 && (
+            <div
+              className="bg-emerald-400 transition-all duration-700"
+              style={{ width: `${(approved / chunks.length) * 100}%` }}
+              title={`Approved: ${approved}`}
+            />
+          )}
+          {inReview > 0 && (
+            <div
+              className="bg-indigo-400 transition-all duration-700"
+              style={{ width: `${(inReview / chunks.length) * 100}%` }}
+              title={`In review: ${inReview}`}
+            />
+          )}
+          {raw > 0 && (
+            <div
+              className="bg-amber-300 transition-all duration-700"
+              style={{ width: `${(raw / chunks.length) * 100}%` }}
+              title={`Untranslated: ${raw}`}
+            />
+          )}
+          {failed > 0 && (
+            <div
+              className="bg-red-400 transition-all duration-700"
+              style={{ width: `${(failed / chunks.length) * 100}%` }}
+              title={`Failed: ${failed}`}
+            />
+          )}
+        </div>
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span>
+            Last 10 chunks:{" "}
+            <span className={velocityPct >= 80 ? "text-emerald-600 font-medium" : velocityPct >= 40 ? "text-indigo-600 font-medium" : "text-amber-600 font-medium"}>
+              {last10Approved}/{last10.length} approved ({velocityPct}%)
+            </span>
+          </span>
+          <span>{chunks.length} total chunks</span>
+        </div>
       </div>
 
       {/* Word stats */}
@@ -154,7 +203,14 @@ export function AnalyticsPage({ book, chunks }: Props) {
         <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">
           Word count per chunk
         </h3>
-        <div className="relative flex items-end gap-px h-48 overflow-x-auto pb-1">
+        <div className="flex gap-2">
+          {/* Y ekseni */}
+          <div className="flex flex-col justify-between text-right shrink-0 pb-1" style={{ height: "192px" }}>
+            <span className="text-xs text-indigo-400">{maxWords.toLocaleString()}</span>
+            <span className="text-xs text-indigo-400">{avgWords.toLocaleString()}</span>
+            <span className="text-xs text-indigo-400">0</span>
+          </div>
+          <div className="relative flex-1 flex items-end gap-px h-48 overflow-x-auto pb-1">
           {/* Ortalama Line */}
           <div
             className="absolute left-0 right-0 border-t border-dashed border-slate-600 opacity-70 pointer-events-none"
@@ -189,6 +245,7 @@ export function AnalyticsPage({ book, chunks }: Props) {
               </div>
             );
           })}
+          </div>
         </div>
         <div className="flex gap-4 mt-3 flex-wrap">
           {[
