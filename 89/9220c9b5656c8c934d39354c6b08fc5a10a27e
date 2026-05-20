@@ -1,0 +1,22 @@
+frontend/src/components/AnalyticsPage.tsx
+  s_f46098508c9085::t_a825738636c74b 213
+  s_f46098508c9085::t_a778ccb4b94664 248
+  s_f46098508c9085::t_342ab477686e73 63-67
+  s_f46098508c9085::t_cee365647f8d03 115-117,119-150,152-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "899220c9b5656c8c934d39354c6b08fc5a10a27e",
+  "prompts": {},
+  "sessions": {
+    "s_f46098508c9085": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "914e8f4e-6f31-4387-a996-467d343e95d3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  }
+}
