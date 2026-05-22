@@ -28,5 +28,25 @@ class Chunk(Base):
     )
     editor_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     scene_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Which TranslationVersion is the chosen one (mirrored into translated_text).
+    # Nullable + no FK-level cascade: clearing the chunk's pointer must not delete
+    # versions, and versions are deleted via the versions relationship cascade.
+    active_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "translation_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,  # break the circular FK at DDL time (chunks <-> versions)
+            name="fk_chunk_active_version",
+        ),
+        nullable=True,
+    )
 
     book: Mapped["Book"] = relationship(back_populates="chunks")  # noqa: F821
+    # All translations this chunk has received, oldest first. Deleting the chunk
+    # deletes its versions. foreign_keys disambiguates from active_version_id.
+    versions: Mapped[list["TranslationVersion"]] = relationship(  # noqa: F821
+        back_populates="chunk",
+        cascade="all, delete-orphan",
+        order_by="TranslationVersion.created_at",
+        foreign_keys="TranslationVersion.chunk_id",
+    )
