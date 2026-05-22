@@ -8,7 +8,7 @@ export function App() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-slate-200 bg-white">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
             onClick={() => setActiveBookId(null)}
             className="flex items-center gap-2 text-lg font-semibold tracking-tight hover:opacity-80"
@@ -22,7 +22,7 @@ export function App() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
+      <main className="flex-1 max-w-screen-2xl w-full mx-auto px-6 py-8">
         {activeBookId === null ? (
           <BookList onOpen={setActiveBookId} />
         ) : (
