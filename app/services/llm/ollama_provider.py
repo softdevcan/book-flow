@@ -17,6 +17,30 @@ _RETRY_REMINDER = (
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
+# Reasoning models (qwen3.x and friends) emit a chain-of-thought block before the
+# actual answer. Even with format="json" some builds leak it, which crashes JSON
+# parsing. Strip it defensively for every model — harmless when no block is present.
+_THINK_BLOCK = re.compile(r"<think\b[^>]*>.*?</think\s*>", re.DOTALL | re.IGNORECASE)
+_DANGLING_OPEN_THINK = re.compile(r"^.*?<think\b[^>]*>", re.DOTALL | re.IGNORECASE)
+_DANGLING_CLOSE_THINK = re.compile(r".*?</think\s*>", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_reasoning(text: str) -> str:
+    """Remove native <think>...</think> reasoning blocks from raw model output.
+
+    Handles three shapes:
+      - well-formed `<think>...</think>` pairs (any number, anywhere)
+      - a dangling open tag with no close (truncated reasoning) — drop up to it
+      - a dangling close tag with no open (model started mid-thought) — drop up to it
+    Returns the surviving text, stripped. Safe to call on output with no tags.
+    """
+    cleaned = _THINK_BLOCK.sub("", text)
+    if "<think" in cleaned.lower():
+        cleaned = _DANGLING_OPEN_THINK.sub("", cleaned)
+    if "</think" in cleaned.lower():
+        cleaned = _DANGLING_CLOSE_THINK.sub("", cleaned, count=1)
+    return cleaned.strip()
+
 
 def _extract_json(text: str) -> str:
     """Pull the first {...} block out of free-form model output."""
@@ -78,6 +102,7 @@ class OllamaProvider(LLMProvider):
         self._num_predict = settings.OLLAMA_NUM_PREDICT
         self._num_ctx = settings.OLLAMA_NUM_CTX
         self._force_json_format = settings.OLLAMA_FORCE_JSON_FORMAT
+        self._think = settings.OLLAMA_THINK
 
     async def generate_json(self, system: str, user: str, schema: type[T]) -> T:
         try:
@@ -113,14 +138,58 @@ class OllamaProvider(LLMProvider):
         }
         if self._force_json_format:
             kwargs["format"] = "json"
+        # `think` toggles reasoning on capable models. Passing it is harmless on
+        # non-reasoning models. Older ollama-python may not accept the kwarg — if
+        # so we retry without it (only matters when think is the default False).
+        kwargs["think"] = self._think
 
         try:
             response = await self._client.chat(**kwargs)
+        except TypeError as exc:
+            if "think" in str(exc):
+                kwargs.pop("think", None)
+                response = await self._client.chat(**kwargs)
+            else:
+                raise LLMProviderError(
+                    f"Ollama request failed (TypeError) for model '{self._model}': {exc}"
+                ) from exc
         except Exception as exc:
-            raise LLMProviderError(f"Ollama request failed: {exc}") from exc
+            # Some exceptions (notably httpx.ReadTimeout) stringify to "", which
+            # produced an opaque "Ollama request failed: " note. Include the type
+            # and the model so timeouts vs. 404s vs. connection errors are tellable.
+            detail = str(exc) or repr(exc)
+            raise LLMProviderError(
+                f"Ollama request failed ({type(exc).__name__}) "
+                f"for model '{self._model}': {detail}"
+            ) from exc
 
-        content = response["message"]["content"]
+        message = response["message"]
+        content = (message.get("content") if isinstance(message, dict)
+                   else getattr(message, "content", None)) or ""
+        # Reasoning models (qwen3.x) put their chain-of-thought in a separate
+        # `thinking` field and leave `content` with just the answer. But if the
+        # token budget is exhausted by reasoning, `content` can come back EMPTY.
+        # In that case, fall back to scanning `thinking` for a JSON object — the
+        # model often writes the final JSON at the end of its reasoning too.
+        thinking = (message.get("thinking") if isinstance(message, dict)
+                    else getattr(message, "thinking", None)) or ""
+
+        # Strip any inline <think>...</think> (some models embed it in content).
+        content = _strip_reasoning(content)
         raw = _extract_json(content)
+
+        if not raw.strip() and thinking:
+            raw = _extract_json(_strip_reasoning(thinking))
+
+        if not raw.strip():
+            done = response.get("done_reason") if isinstance(response, dict) else None
+            raise LLMProviderError(
+                f"Ollama returned no parseable content for model '{self._model}' "
+                f"(done_reason={done!r}, content_empty={not content.strip()}, "
+                f"thinking_len={len(thinking)}). The reasoning may have exhausted "
+                f"num_predict ({self._num_predict}) before emitting the answer."
+            )
+
         # Many local models emit literal newlines/tabs inside JSON strings (technically
         # invalid). `strict=False` accepts them; if that still fails, fall back to a
         # manual scrub of unescaped control chars inside string literals.

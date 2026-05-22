@@ -1,10 +1,15 @@
 import { useState } from "react";
-import type { Chunk, ChunkStatus } from "../types";
+import { api } from "../api";
+import type { Chunk, ChunkStatus, TranslationVersion } from "../types";
 
 interface Props {
   chunk: Chunk;
   onTranslate: () => void;
   onUpdate: (patch: Partial<Chunk>) => void;
+  /** Called with the refreshed chunk after a version is activated. */
+  onChunkReplaced?: (chunk: Chunk) => void;
+  /** False when no model is selected yet (two-stage needs both stages). */
+  canTranslate?: boolean;
 }
 
 const statusStyles: Record<ChunkStatus, string> = {
@@ -13,11 +18,46 @@ const statusStyles: Record<ChunkStatus, string> = {
   approved: "bg-emerald-100 text-emerald-800",
 };
 
-export function ChunkCard({ chunk, onTranslate, onUpdate }: Props) {
+export function ChunkCard({
+  chunk,
+  onTranslate,
+  onUpdate,
+  onChunkReplaced,
+  canTranslate = true,
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(chunk.translated_text ?? "");
+  const [versions, setVersions] = useState<TranslationVersion[] | null>(null);
+  const [versionsLoading, setVersionsLoading] = useState(false);
 
   const isFailed = chunk.editor_notes?.some((n) => n.startsWith("translation_failed"));
+
+  async function loadVersions() {
+    setVersionsLoading(true);
+    try {
+      setVersions(await api.listVersions(chunk.id));
+    } finally {
+      setVersionsLoading(false);
+    }
+  }
+
+  async function useVersion(versionId: number) {
+    const updated = await api.activateVersion(chunk.id, versionId);
+    onChunkReplaced?.(updated);
+    await loadVersions(); // refresh active badge
+  }
+
+  function fmtTime(iso: string) {
+    const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+    return d.toLocaleString();
+  }
+
+  function versionLabel(v: TranslationVersion) {
+    if (v.pipeline === "two_stage") {
+      return `two-stage · ${v.stage1_model ?? "?"} → ${v.stage2_model ?? "?"}`;
+    }
+    return `${v.pipeline ?? "single"} · ${v.stage1_model ?? "?"}`;
+  }
 
   return (
     <article className="rounded-lg border border-slate-200 bg-white overflow-hidden">
@@ -40,7 +80,9 @@ export function ChunkCard({ chunk, onTranslate, onUpdate }: Props) {
         <div className="flex items-center gap-2">
           <button
             onClick={onTranslate}
-            className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded px-2 py-1"
+            disabled={!canTranslate}
+            title={!canTranslate ? "Select a model first" : undefined}
+            className="text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded px-2 py-1"
           >
             {chunk.translated_text ? "Re-translate" : "Translate"}
           </button>
@@ -126,6 +168,63 @@ export function ChunkCard({ chunk, onTranslate, onUpdate }: Props) {
                   <li key={i}>{n}</li>
                 ))}
               </ul>
+            </details>
+          )}
+
+          {chunk.translated_text && (
+            <details
+              className="mt-2"
+              onToggle={(e) => {
+                if ((e.target as HTMLDetailsElement).open && versions === null) {
+                  loadVersions();
+                }
+              }}
+            >
+              <summary className="text-xs text-slate-500 cursor-pointer">
+                Versions{versions ? ` (${versions.length})` : ""}
+              </summary>
+              {versionsLoading && (
+                <p className="mt-1 text-xs text-slate-400">Loading…</p>
+              )}
+              {versions && versions.length > 0 && (
+                <ul className="mt-2 space-y-2">
+                  {versions.map((v) => {
+                    const isActive = v.id === chunk.active_version_id;
+                    return (
+                      <li
+                        key={v.id}
+                        className={`rounded border p-2 text-xs ${
+                          isActive ? "border-indigo-300 bg-indigo-50" : "border-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-slate-500">
+                            {versionLabel(v)} · {fmtTime(v.created_at)}
+                          </span>
+                          {isActive ? (
+                            <span className="rounded-full bg-indigo-100 text-indigo-700 px-2 py-0.5 font-medium">
+                              active
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => useVersion(v.id)}
+                              className="text-indigo-600 hover:underline"
+                            >
+                              Use this
+                            </button>
+                          )}
+                        </div>
+                        <p className="mt-1 text-slate-600 font-serif line-clamp-3 whitespace-pre-wrap">
+                          {v.translated_text}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {versions && versions.length === 0 && (
+                <p className="mt-1 text-xs text-slate-400">No versions yet.</p>
+              )}
             </details>
           )}
         </div>
