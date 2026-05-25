@@ -54,7 +54,7 @@ function exportAsTxt(book: Book, chunks: Chunk[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${book.title.replace(/\s+/g, "_")}_TR.txt`;
+  a.download = `${book.title.replace(/\s+/g, "_")}_${book.target_language.toUpperCase()}.txt`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -231,7 +231,12 @@ export function BookDetail({ bookId, onBack }: Props) {
 
       {/* Book title + stats */}
       <div>
-        <h1 className="text-xl font-bold tracking-tight">{book.title}</h1>
+        <h1 className="text-xl font-bold tracking-tight">
+          {book.title}{" "}
+          <span className="ml-2 align-middle text-xs font-medium text-slate-500 rounded bg-slate-100 px-2 py-0.5">
+            {book.source_language.toUpperCase()} → {book.target_language.toUpperCase()}
+          </span>
+        </h1>
         <p className="text-sm text-slate-500">
           {book.author ?? "Unknown author"} · {book.total_chunks} chunks ·{" "}
           <span className="text-amber-600">{counts.raw} untranslated</span> ·{" "}
@@ -331,6 +336,7 @@ export function BookDetail({ bookId, onBack }: Props) {
                     <ChunkCard
                       key={c.id}
                       chunk={c}
+                      book={book}
                       canTranslate={modelsReady}
                       onTranslate={() => translateOne(c.id)}
                       onUpdate={(patch) => updateChunk(c.id, patch)}

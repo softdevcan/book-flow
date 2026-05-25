@@ -5,8 +5,21 @@ export interface Book {
   title: string;
   author: string | null;
   style_guide: string | null;
+  source_language: string;
+  target_language: string;
   total_chunks: number;
   created_at: string;
+}
+
+export interface LangOption {
+  code: string;
+  name: string;
+}
+
+export interface LangDetection {
+  code: string;
+  confidence: number;
+  method: "lib" | "llm";
 }
 
 export interface Chunk {
