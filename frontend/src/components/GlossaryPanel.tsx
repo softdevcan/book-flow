@@ -23,7 +23,7 @@ export function GlossaryPanel({ bookId }: Props) {
         setTerms(await api.listGlossary(bookId));
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : "Sözlük yüklenemedi.";
+          err instanceof Error ? err.message : "Failed to load glossary.";
         setError(message);
         setTerms([]);
       } finally {
@@ -48,7 +48,7 @@ export function GlossaryPanel({ bookId }: Props) {
       await load({ silent: true });
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Sözlük terimi eklenemedi.";
+        err instanceof Error ? err.message : "Failed to add glossary term.";
       setError(message);
     }
   }
@@ -60,7 +60,7 @@ export function GlossaryPanel({ bookId }: Props) {
       await load({ silent: true });
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Sözlük terimi silinemedi.";
+        err instanceof Error ? err.message : "Failed to remove glossary term.";
       setError(message);
     }
   }
@@ -102,9 +102,9 @@ export function GlossaryPanel({ bookId }: Props) {
         </button>
       </form>
       {isLoading ? (
-        <p className="text-xs text-slate-400">Sözlük yükleniyor…</p>
+        <p className="text-xs text-slate-400">Loading glossary…</p>
       ) : terms.length === 0 ? (
-        <p className="text-xs text-slate-400">Henüz terim yok.</p>
+        <p className="text-xs text-slate-400">No terms yet.</p>
       ) : (
         <ul className="space-y-1 max-h-48 overflow-y-auto">
           {terms.map((t) => (

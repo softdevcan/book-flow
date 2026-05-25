@@ -48,9 +48,9 @@ export function BookList({ onOpen }: Props) {
       <section>
         <h1 className="text-2xl font-bold tracking-tight mb-1">Library</h1>
         <p className="text-sm text-slate-500 mb-5">
-          Upload an EPUB, PDF, DOCX or TXT file. BookFlow will parse it, split it
-          into translation-friendly chunks, and let you translate them
-          chunk-by-chunk into Turkish.
+          Upload an EPUB, PDF, DOCX or TXT file. BookFlow will parse it, split
+          it into translation-friendly chunks, and let you translate them
+          chunk-by-chunk into your target language.
         </p>
 
         {error && (
@@ -76,7 +76,8 @@ export function BookList({ onOpen }: Props) {
                   <div>
                     <div className="font-medium">{b.title}</div>
                     <div className="text-xs text-slate-500">
-                      {b.author ?? "Unknown author"} · {b.total_chunks} chunks
+                      {b.author ?? "Unknown author"} · {b.total_chunks} chunks ·{" "}
+                      {b.source_language.toUpperCase()} → {b.target_language.toUpperCase()}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

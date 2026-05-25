@@ -15,7 +15,8 @@ COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY app ./app
-COPY main.py ./
+COPY migrations ./migrations
+COPY alembic.ini main.py ./
 
 RUN mkdir -p /data
 ENV DATABASE_URL=sqlite:////data/bookflow.db

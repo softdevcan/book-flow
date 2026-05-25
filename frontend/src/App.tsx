@@ -17,7 +17,7 @@ export function App() {
             BookFlow
           </button>
           <span className="text-xs text-slate-500">
-            AI-assisted literary translation · EN → TR
+            AI-assisted literary translation
           </span>
         </div>
       </header>

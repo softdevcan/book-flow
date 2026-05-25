@@ -8,7 +8,8 @@ Strategy:
 3. Greedily merge consecutive non-heading paragraphs into a chunk while the
    total length stays below `max_chars`. This preserves narrative flow.
 4. A paragraph longer than `max_chars` is itself split on sentence boundaries
-   (., !, ?, …, plus Turkish punctuation), then re-greedily packed.
+   (., !, ?, …) followed by any Unicode uppercase letter — covers Latin (incl.
+   Turkish, accented), Cyrillic, Greek, etc. Then re-greedily packed.
 5. Very short tail chunks are folded into the previous one when they fall
    below `min_chars`, to avoid translating one-line fragments.
 """
@@ -17,8 +18,11 @@ from __future__ import annotations
 
 import re
 
+import regex
+
 _PARAGRAPH_SPLIT = re.compile(r"\n\s*\n+")
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?…])\s+(?=[A-ZÇĞİÖŞÜ\"'\(])")
+# `regex` package — needed for the Unicode `\p{Lu}` (any uppercase letter) class.
+_SENTENCE_SPLIT = regex.compile(r"(?<=[.!?…])\s+(?=[\p{Lu}\"'(])")
 
 # Lines that look like explicit structural headings force a chunk boundary.
 # Deliberately conservative: only matches known heading keywords + number/name.

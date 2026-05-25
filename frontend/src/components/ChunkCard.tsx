@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { api } from "../api";
-import type { Chunk, ChunkStatus, TranslationVersion } from "../types";
+import type { Book, Chunk, ChunkStatus, TranslationVersion } from "../types";
 
 interface Props {
   chunk: Chunk;
+  book: Book;
   onTranslate: () => void;
   onUpdate: (patch: Partial<Chunk>) => void;
   /** Called with the refreshed chunk after a version is activated. */
@@ -20,6 +21,7 @@ const statusStyles: Record<ChunkStatus, string> = {
 
 export function ChunkCard({
   chunk,
+  book,
   onTranslate,
   onUpdate,
   onChunkReplaced,
@@ -100,7 +102,7 @@ export function ChunkCard({
       <div className="grid md:grid-cols-2 divide-x divide-slate-100">
         <div className="p-4">
           <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">
-            Source (EN)
+            Source ({book.source_language.toUpperCase()})
           </p>
           <p className="text-sm whitespace-pre-wrap font-serif leading-relaxed">
             {chunk.source_text}
@@ -109,7 +111,7 @@ export function ChunkCard({
         <div className="p-4 bg-slate-50/40">
           <div className="flex justify-between items-center mb-1">
             <p className="text-xs uppercase tracking-wider text-slate-400">
-              Translation (TR)
+              Translation ({book.target_language.toUpperCase()})
             </p>
             {chunk.translated_text && !editing && (
               <button
