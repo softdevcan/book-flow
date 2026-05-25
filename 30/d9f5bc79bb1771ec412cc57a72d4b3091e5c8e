@@ -1,0 +1,90 @@
+frontend/src/App.tsx
+  s_c446e78148de61::t_9b409ac44fc7d1 20
+frontend/src/components/ChunkCard.tsx
+  s_c446e78148de61::t_c93e5cdebeb0eb 3,7
+  s_c446e78148de61::t_a9533cbb202bdc 105
+  s_c446e78148de61::t_20df1ba46bd3b0 114
+  s_c446e78148de61::t_fc51e3d15198a7 24
+app/models/book.py
+  s_c446e78148de61::t_689e86348ac1b6 16-18
+alembic.ini
+  s_c446e78148de61::t_75ee7c1b2e42f0 1-39
+app/services/translator.py
+  s_c446e78148de61::t_2640c6c35cadbe 15-19,30-34,37-39,49,63,74,79-82,90,93-95,104,118,124,129-132,213-214,225,227-228,362,403,406-407,462
+app/services/llm/lang_rules.py
+  s_c446e78148de61::t_8a1a1c524f606f 1-97
+app/services/lang_detect.py
+  s_c446e78148de61::t_86929f02112512 1-80
+frontend/src/components/UploadForm.tsx
+  s_c446e78148de61::t_f0cbee0cf27706 1,3,9-17,27-61,68-75,81-82,97-99,108-118,132,136-169
+frontend/src/components/BookList.tsx
+  s_c446e78148de61::t_fd421ff831a115 79-80
+  s_c446e78148de61::t_d97ab37dd00bbd 51-53
+app/schemas/book.py
+  s_c446e78148de61::t_bae515064164bc 10-11,19-25
+CLAUDE.md
+  s_c446e78148de61::t_133a0d76fffb37 113
+  s_c446e78148de61::t_f7c5e6869b092a 126-129
+  s_c446e78148de61::t_887888459dda72 118
+  s_c446e78148de61::t_311f3224f3ec12 17-19,26-28,31-32,34
+  s_c446e78148de61::t_24701b0bfc12cf 156-157
+  s_c446e78148de61::t_76e107b8bc2ee0 181
+  s_c446e78148de61::t_c35a3f24694f1e 185-190,198-199
+  s_c446e78148de61::t_cf96e75cff2652 7,9-11
+migrations/env.py
+  s_c446e78148de61::t_22d8a986568124 1-56
+Dockerfile
+  s_c446e78148de61::t_217ae3584b42b7 18-19
+frontend/src/types.ts
+  s_c446e78148de61::t_7ae2097d7a80c5 8-9,14-22
+app/api/endpoints/books.py
+  s_c446e78148de61::t_82bf1958ed4be1 8,12,19-36,39,57-61,85-92,101-102
+frontend/src/components/BookDetail.tsx
+  s_c446e78148de61::t_c70dc38f151c19 57
+  s_c446e78148de61::t_582bfc0b40d5e1 234-239
+  s_c446e78148de61::t_67a8fed44f9c8f 339
+frontend/src/components/GlossaryPanel.tsx
+  s_c446e78148de61::t_9f4702beec96bc 63
+  s_c446e78148de61::t_30a5722b304e92 26
+  s_c446e78148de61::t_2d4f0f9e235b57 105,107
+  s_c446e78148de61::t_ef2bcbe5e71aba 51
+main.py
+  s_c446e78148de61::t_ff485c734d81db 3,5-6,11,16-22,26-40,45
+  s_c446e78148de61::t_3242b2da95f485 9
+  s_c446e78148de61::t_f9e13acad6ad7e 62
+migrations/script.py.mako
+  s_c446e78148de61::t_be73a4dba8f2ef 1-25
+requirements.txt
+  s_c446e78148de61::t_f95192c9d69d20 14-16
+docs/multilingual-translation-plan.md
+  s_c446e78148de61::t_1052b464f186e2 1-309
+migrations/versions/0002_add_book_languages.py
+  s_c446e78148de61::t_3de151c543436f 1-33
+app/schemas/language.py
+  s_c446e78148de61::t_f5801f4dada00b 1-37
+app/api/endpoints/languages.py
+  s_c446e78148de61::t_9007893f9db18e 1-28
+frontend/src/api.ts
+  s_c446e78148de61::t_f249587daa2e48 94-100
+  s_c446e78148de61::t_d99e16a24b5b19 5-6
+migrations/versions/0001_initial.py
+  s_c446e78148de61::t_2fa094f941580d 1-114
+app/services/chunker.py
+  s_c446e78148de61::t_a9b53c3d1a5021 11-12,21-22,24-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "30d9f5bc79bb1771ec412cc57a72d4b3091e5c8e",
+  "prompts": {},
+  "sessions": {
+    "s_c446e78148de61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1c526107-6cd7-452c-8407-ca96aaf2ae8d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  }
+}
