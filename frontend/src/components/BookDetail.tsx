@@ -71,7 +71,10 @@ function chapterStatus(group: ChapterGroup): "all_approved" | "partial" | "untra
 export function BookDetail({ bookId, onBack }: Props) {
   const [book, setBook] = useState<Book | null>(null);
   const [chunks, setChunks] = useState<Chunk[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [stage1Model, setStage1Model] = useState<string | null>(null);
+  const [stage2Model, setStage2Model] = useState<string | null>(null);
+  const [pipeline, setPipeline] = useState<"single" | "two_stage">("single");
+  const [stageDefaults, setStageDefaults] = useState<{ stage1: string; stage2: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [activeChapterIdx, setActiveChapterIdx] = useState(0);
@@ -92,6 +95,22 @@ export function BookDetail({ bookId, onBack }: Props) {
   useEffect(() => { loadAll(); }, [bookId]);
 
   useEffect(() => {
+    api.listModels()
+      .then((res) => {
+        setPipeline(res.pipeline);
+        setStageDefaults(res.stage_defaults);
+      })
+      .catch(() => setStageDefaults(null));
+  }, []);
+
+  // Each stage's effective model: explicit UI pick, else the .env stage default
+  // (which is empty by design). In two-stage mode both must resolve to something.
+  const effStage1 = stage1Model ?? (stageDefaults?.stage1 || null);
+  const effStage2 = stage2Model ?? (stageDefaults?.stage2 || null);
+  const modelsReady =
+    pipeline === "single" ? true : Boolean(effStage1 && effStage2);
+
+  useEffect(() => {
     const anyRaw = chunks.some((c) => c.status === "raw" && c.translated_text === null);
     if (!anyRaw) {
       if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
@@ -102,10 +121,18 @@ export function BookDetail({ bookId, onBack }: Props) {
     return () => { if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; } };
   }, [chunks]);
 
+  const translateOverrides = () =>
+    pipeline === "two_stage"
+      ? {
+          stage1_model: stage1Model ?? undefined,
+          stage2_model: stage2Model ?? undefined,
+        }
+      : { model: stage1Model ?? undefined };
+
   async function translateAll() {
     setTranslating(true);
     try {
-      await api.translateBook(bookId, { model: selectedModel ?? undefined });
+      await api.translateBook(bookId, translateOverrides());
       loadAll();
     } finally {
       setTranslating(false);
@@ -113,13 +140,17 @@ export function BookDetail({ bookId, onBack }: Props) {
   }
 
   async function translateOne(id: number) {
-    await api.translateChunk(id, { model: selectedModel ?? undefined });
+    await api.translateChunk(id, translateOverrides());
     loadAll();
   }
 
   async function updateChunk(id: number, patch: Partial<Chunk>) {
     const updated = await api.updateChunk(id, patch);
     setChunks((prev) => prev.map((c) => (c.id === id ? updated : c)));
+  }
+
+  function replaceChunk(updated: Chunk) {
+    setChunks((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
   }
 
   if (!book) return <p className="text-sm text-slate-500">Loading…</p>;
@@ -146,10 +177,32 @@ export function BookDetail({ bookId, onBack }: Props) {
         <div className="flex items-center gap-3 flex-wrap">
           {activeView === "chunks" && (
             <>
-              <ModelPicker selected={selectedModel} onChange={setSelectedModel} />
+              {pipeline === "two_stage" ? (
+                <>
+                  <ModelPicker
+                    label="Stage 1 (Builder)"
+                    selected={stage1Model}
+                    onChange={setStage1Model}
+                    defaultModel={stageDefaults?.stage1}
+                  />
+                  <ModelPicker
+                    label="Stage 2 (Artist)"
+                    selected={stage2Model}
+                    onChange={setStage2Model}
+                    defaultModel={stageDefaults?.stage2}
+                  />
+                </>
+              ) : (
+                <ModelPicker
+                  label="Model"
+                  selected={stage1Model}
+                  onChange={setStage1Model}
+                />
+              )}
               <button
                 onClick={translateAll}
-                disabled={translating || pendingCount === 0}
+                disabled={translating || pendingCount === 0 || !modelsReady}
+                title={!modelsReady ? "Select a model for both Stage 1 and Stage 2 first" : undefined}
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded px-3 py-1.5 flex items-center gap-1.5"
               >
                 {translating && (
@@ -278,8 +331,10 @@ export function BookDetail({ bookId, onBack }: Props) {
                     <ChunkCard
                       key={c.id}
                       chunk={c}
+                      canTranslate={modelsReady}
                       onTranslate={() => translateOne(c.id)}
                       onUpdate={(patch) => updateChunk(c.id, patch)}
+                      onChunkReplaced={replaceChunk}
                     />
                   ))}
                 </>

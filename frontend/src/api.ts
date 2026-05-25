@@ -1,6 +1,22 @@
-import type { Book, Chunk, GlossaryTerm, ModelsResponse } from "./types";
+import type {
+  Book,
+  Chunk,
+  GlossaryTerm,
+  ModelsResponse,
+  TranslationVersion,
+} from "./types";
 
 const BASE = "/api";
+
+export interface TranslateOverrides {
+  provider?: string;
+  /** Single-pass / legacy Stage 1 override. */
+  model?: string;
+  /** Two-stage Builder model. */
+  stage1_model?: string;
+  /** Two-stage Artist model. */
+  stage2_model?: string;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
@@ -41,18 +57,22 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
-  translateChunk: (id: number, overrides: { provider?: string; model?: string }) =>
+  translateChunk: (id: number, overrides: TranslateOverrides) =>
     request<Chunk>(`/chunks/${id}/translate`, {
       method: "POST",
       body: JSON.stringify(overrides),
     }),
-  translateBook: (
-    id: number,
-    overrides: { provider?: string; model?: string },
-  ) =>
+  translateBook: (id: number, overrides: TranslateOverrides) =>
     request<Chunk[]>(`/books/${id}/translate`, {
       method: "POST",
       body: JSON.stringify(overrides),
+    }),
+
+  listVersions: (chunkId: number) =>
+    request<TranslationVersion[]>(`/chunks/${chunkId}/versions`),
+  activateVersion: (chunkId: number, versionId: number) =>
+    request<Chunk>(`/chunks/${chunkId}/versions/${versionId}/activate`, {
+      method: "POST",
     }),
 
   listGlossary: (bookId: number) =>

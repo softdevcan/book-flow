@@ -18,6 +18,18 @@ export interface Chunk {
   status: ChunkStatus;
   editor_notes: string[] | null;
   scene_context: string | null;
+  active_version_id: number | null;
+}
+
+export interface TranslationVersion {
+  id: number;
+  chunk_id: number;
+  translated_text: string;
+  editor_notes: string[] | null;
+  pipeline: string | null;
+  stage1_model: string | null;
+  stage2_model: string | null;
+  created_at: string;
 }
 
 export interface GlossaryTerm {
@@ -29,6 +41,11 @@ export interface GlossaryTerm {
 
 export interface ModelsResponse {
   provider: string;
+  pipeline: "single" | "two_stage";
+  /** What .env asks for — may not be installed. */
+  configured_default: string | null;
+  /** The default that will actually run (installed), or null if none installed. */
   active_default: string | null;
+  stage_defaults: { stage1: string; stage2: string };
   models: string[];
 }

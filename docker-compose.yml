@@ -9,13 +9,20 @@ services:
     environment:
       DATABASE_URL: sqlite:////data/bookflow.db
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      TRANSLATION_PIPELINE: ${TRANSLATION_PIPELINE:-single}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      # Empty by default — models are picked per request from the UI.
+      OLLAMA_STAGE1_MODEL: ${OLLAMA_STAGE1_MODEL:-}
+      OLLAMA_STAGE2_MODEL: ${OLLAMA_STAGE2_MODEL:-}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.4}
-      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-180}
+      # Raised for two-stage: two sequential passes + Ollama model-swap latency.
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-400}
       OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-4096}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
       OLLAMA_FORCE_JSON_FORMAT: ${OLLAMA_FORCE_JSON_FORMAT:-false}
+      # Reasoning off by default: translation needs no chain-of-thought.
+      OLLAMA_THINK: ${OLLAMA_THINK:-false}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-["*"]}
