@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { api } from "../api";
 import type { LangDetection, LangOption } from "../types";
 
@@ -6,10 +7,6 @@ interface Props {
   onUploaded: () => void;
 }
 
-// Read a small text excerpt from any file type for client-side detection.
-// Binary formats (epub/pdf/docx) yield mostly noise but lingua-py still picks
-// the dominant script for common European languages. Worst case the user
-// overrides; server re-runs detection on the parsed text if needed.
 async function readExcerpt(file: File): Promise<string> {
   const blob = file.slice(0, 8192);
   return await blob.text();
@@ -50,10 +47,9 @@ export function UploadForm({ onUploaded }: Props) {
       }
       const det = await api.detectLanguage(excerpt);
       setDetection(det);
-      // Only pre-fill if the user hasn't already picked one manually.
       setSourceLang((prev) => prev || det.code);
     } catch {
-      // Detection is best-effort; user can still pick manually.
+      // detection is best-effort
     } finally {
       setDetecting(false);
     }
@@ -86,10 +82,9 @@ export function UploadForm({ onUploaded }: Props) {
     setMsg(null);
     try {
       const book = await api.uploadBook(form);
-      setMsg({
-        kind: "ok",
-        text: `Uploaded "${book.title}" — ${book.total_chunks} chunks ready.`,
-      });
+      const successMsg = `Uploaded "${book.title}" — ${book.total_chunks} chunks ready.`;
+      setMsg({ kind: "ok", text: successMsg });
+      toast.success(successMsg);
       setFile(null);
       setTitle("");
       setAuthor("");
@@ -99,7 +94,9 @@ export function UploadForm({ onUploaded }: Props) {
       setDetection(null);
       onUploaded();
     } catch (e) {
-      setMsg({ kind: "err", text: String(e) });
+      const errMsg = String(e);
+      setMsg({ kind: "err", text: errMsg });
+      toast.error(`Upload failed: ${errMsg}`);
     } finally {
       setBusy(false);
     }
@@ -119,10 +116,10 @@ export function UploadForm({ onUploaded }: Props) {
   return (
     <form
       onSubmit={submit}
-      className="rounded-lg border border-slate-200 bg-white p-5 space-y-3"
+      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 space-y-3"
     >
-      <h2 className="font-semibold">Upload a book</h2>
-      <p className="text-xs text-slate-500 -mt-2">
+      <h2 className="font-semibold text-slate-800 dark:text-slate-100">Upload a book</h2>
+      <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">
         Accepted: .epub, .pdf, .docx, .txt, .md (max 50 MB)
       </p>
 
@@ -130,7 +127,7 @@ export function UploadForm({ onUploaded }: Props) {
         type="file"
         accept=".epub,.pdf,.docx,.txt,.md"
         onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-        className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+        className="block w-full text-sm text-slate-700 dark:text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-indigo-50 dark:file:bg-indigo-900/30 file:text-indigo-700 dark:file:text-indigo-300 hover:file:bg-indigo-100 dark:hover:file:bg-indigo-900/50"
       />
 
       <div className="grid grid-cols-2 gap-3">
@@ -138,7 +135,7 @@ export function UploadForm({ onUploaded }: Props) {
           <select
             value={sourceLang}
             onChange={(e) => setSourceLang(e.target.value)}
-            className="input"
+            className="input-dark"
           >
             <option value="">Auto-detect</option>
             {languages.map((l) => (
@@ -148,7 +145,7 @@ export function UploadForm({ onUploaded }: Props) {
             ))}
           </select>
           {detectionLabel && (
-            <span className="block text-xs text-slate-500 mt-1">{detectionLabel}</span>
+            <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">{detectionLabel}</span>
           )}
         </Field>
         <Field label="Target language">
@@ -156,7 +153,7 @@ export function UploadForm({ onUploaded }: Props) {
             value={targetLang}
             onChange={(e) => setTargetLang(e.target.value)}
             required
-            className="input"
+            className="input-dark"
           >
             <option value="">Select…</option>
             {languages.map((l) => (
@@ -173,14 +170,14 @@ export function UploadForm({ onUploaded }: Props) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Auto-detected from file metadata"
-          className="input"
+          className="input-dark"
         />
       </Field>
       <Field label="Author (optional)">
         <input
           value={author}
           onChange={(e) => setAuthor(e.target.value)}
-          className="input"
+          className="input-dark"
         />
       </Field>
       <Field label="Style guide (optional)">
@@ -189,7 +186,7 @@ export function UploadForm({ onUploaded }: Props) {
           onChange={(e) => setStyleGuide(e.target.value)}
           rows={3}
           placeholder="Genre: Cyberpunk Sci-Fi. Tone is gritty…"
-          className="input"
+          className="input-dark"
         />
       </Field>
       <Field label={`Chunk size: ~${maxChars} chars`}>
@@ -200,7 +197,7 @@ export function UploadForm({ onUploaded }: Props) {
           step={100}
           value={maxChars}
           onChange={(e) => setMaxChars(parseInt(e.target.value))}
-          className="w-full"
+          className="w-full accent-indigo-600"
         />
       </Field>
 
@@ -215,8 +212,8 @@ export function UploadForm({ onUploaded }: Props) {
         <div
           className={`text-sm rounded px-3 py-2 ${
             msg.kind === "ok"
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-              : "bg-red-50 text-red-700 border border-red-200"
+              ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+              : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800"
           }`}
         >
           {msg.text}
@@ -224,15 +221,21 @@ export function UploadForm({ onUploaded }: Props) {
       )}
 
       <style>{`
-        .input {
+        .input-dark {
           width: 100%;
           border: 1px solid rgb(226 232 240);
           border-radius: 6px;
           padding: 6px 10px;
           font-size: 14px;
           background: white;
+          color: rgb(15 23 42);
         }
-        .input:focus { outline: 2px solid rgb(99 102 241); outline-offset: -1px; }
+        .dark .input-dark {
+          border-color: rgb(71 85 105);
+          background: rgb(30 41 59);
+          color: rgb(226 232 240);
+        }
+        .input-dark:focus { outline: 2px solid rgb(99 102 241); outline-offset: -1px; }
       `}</style>
     </form>
   );
@@ -241,7 +244,7 @@ export function UploadForm({ onUploaded }: Props) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-slate-600 mb-1">{label}</span>
+      <span className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">{label}</span>
       {children}
     </label>
   );

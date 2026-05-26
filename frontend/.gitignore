@@ -3,3 +3,7 @@ dist/
 .vite/
 *.log
 .env.local
+
+# tsc -b emit artifacts that must never sit next to .tsx sources
+src/**/*.js
+*.tsbuildinfo

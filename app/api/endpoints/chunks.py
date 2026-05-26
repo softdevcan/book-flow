@@ -16,6 +16,7 @@ from app.schemas.chunk import (
     TranslationVersionRead,
 )
 from app.core.config import settings
+from app.services import events as bus
 from app.services.translator import (
     resolve_required_models,
     translate_book_batched,
@@ -130,6 +131,13 @@ def update_chunk(
         setattr(chunk, field, value)
     db.commit()
     db.refresh(chunk)
+    bus.publish(chunk.book_id, {
+        "type": "chunk_updated",
+        "chunk_id": chunk.id,
+        "status": chunk.status.value,
+        "translated": chunk.translated_text is not None,
+        "failed": False,
+    })
     return chunk
 
 
