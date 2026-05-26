@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { api } from "../api";
 import type { Book, Chunk } from "../types";
 import { ModelPicker } from "./ModelPicker";
 import { GlossaryPanel } from "./GlossaryPanel";
 import { ChunkCard } from "./ChunkCard";
 import { AnalyticsPage } from "./AnalyticsPage";
+import { BatchProgressBar } from "./BatchProgressBar";
+import { ChunkFilterBar, type StatusFilter } from "./ChunkFilterBar";
+import { useChunkEvents, type ChunkEvent } from "../hooks/useChunkEvents";
+import { useChunkKeybindings } from "../hooks/useChunkKeybindings";
 
 type ActiveView = "chunks" | "analytics";
 
@@ -89,6 +94,27 @@ function chapterStatus(group: ChapterGroup): "all_approved" | "partial" | "untra
   return "untranslated";
 }
 
+// Coalesce rapid SSE toasts: if > 5 events in 2s, collapse to one summary.
+function makeToastCoalescer() {
+  let buffer: string[] = [];
+  let timer: number | null = null;
+  return function push(msg: string) {
+    buffer.push(msg);
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      if (buffer.length > 5) {
+        toast.success(`${buffer.length} chunks translated`);
+      } else {
+        buffer.forEach((m) => toast.success(m));
+      }
+      buffer = [];
+      timer = null;
+    }, 2000);
+  };
+}
+
+const toastSuccess = makeToastCoalescer();
+
 export function BookDetail({ bookId, onBack }: Props) {
   const [book, setBook] = useState<Book | null>(null);
   const [chunks, setChunks] = useState<Chunk[]>([]);
@@ -100,10 +126,17 @@ export function BookDetail({ bookId, onBack }: Props) {
   const [translating, setTranslating] = useState(false);
   const [activeChapterIdx, setActiveChapterIdx] = useState(0);
   const [activeView, setActiveView] = useState<ActiveView>("chunks");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchText, setSearchText] = useState("");
+  const [focusedChunkId, setFocusedChunkId] = useState<number | null>(null);
+  const [editRequestId, setEditRequestId] = useState<number | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [lastBatchEvent, setLastBatchEvent] = useState<ChunkEvent | null>(null);
   // Set of chunk ids the user has manually picked for batch translation.
   // Cleared after a successful translate-selection request.
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const pollRef = useRef<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   function toggleSelected(id: number) {
     setSelectedIds((prev) => {
@@ -148,13 +181,7 @@ export function BookDetail({ bookId, onBack }: Props) {
       .catch(() => setStageDefaults(null));
   }, []);
 
-  // Each stage's effective model: explicit UI pick, else the .env stage default
-  // (which is empty by design). In two-stage mode both must resolve to something.
-  const effStage1 = stage1Model ?? (stageDefaults?.stage1 || null);
-  const effStage2 = stage2Model ?? (stageDefaults?.stage2 || null);
-  const modelsReady =
-    pipeline === "single" ? true : Boolean(effStage1 && effStage2);
-
+  // Fallback 3-second poll when SSE is closed and chunks are still pending.
   useEffect(() => {
     const anyRaw = chunks.some((c) => c.status === "raw" && c.translated_text === null);
     if (!anyRaw) {
@@ -166,26 +193,61 @@ export function BookDetail({ bookId, onBack }: Props) {
     return () => { if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; } };
   }, [chunks]);
 
+  // SSE event handler
+  const handleChunkEvent = useCallback((e: ChunkEvent) => {
+    if (e.type === "batch_progress") {
+      setLastBatchEvent(e);
+      return;
+    }
+    if (e.type === "chunk_updated" && e.chunk_id != null) {
+      // Fetch the updated chunk and replace in state.
+      api.getChunk(e.chunk_id).then((updated) => {
+        setChunks((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        if (e.translated) {
+          toastSuccess(`#${updated.sequence_number} translated`);
+        }
+      }).catch(() => {});
+    }
+    if (e.type === "chunk_failed" && e.chunk_id != null) {
+      toast.error(`Chunk #${e.chunk_id} failed — ${e.reason ?? "unknown error"}`);
+      api.getChunk(e.chunk_id).then((updated) => {
+        setChunks((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      }).catch(() => {});
+    }
+  }, []);
+
+  useChunkEvents(bookId, handleChunkEvent, activeView === "chunks");
+
+  const effStage1 = stage1Model ?? (stageDefaults?.stage1 || null);
+  const effStage2 = stage2Model ?? (stageDefaults?.stage2 || null);
+  const modelsReady = pipeline === "single" ? true : Boolean(effStage1 && effStage2);
+
   const translateOverrides = () =>
     pipeline === "two_stage"
-      ? {
-          stage1_model: stage1Model ?? undefined,
-          stage2_model: stage2Model ?? undefined,
-        }
+      ? { stage1_model: stage1Model ?? undefined, stage2_model: stage2Model ?? undefined }
       : { model: stage1Model ?? undefined };
 
   async function translateAll() {
     setTranslating(true);
     try {
       await api.translateBook(bookId, translateOverrides());
+      toast.success("Translation queued for all pending chunks");
       loadAll();
+    } catch (e) {
+      toast.error(`Queue failed: ${e}`);
     } finally {
       setTranslating(false);
     }
   }
 
   async function translateOne(id: number) {
-    await api.translateChunk(id, translateOverrides());
+    const chunk = chunks.find((c) => c.id === id);
+    const seqNo = chunk?.sequence_number ?? id;
+    toast.promise(api.translateChunk(id, translateOverrides()), {
+      loading: `Queuing #${seqNo}…`,
+      success: `Queued #${seqNo}`,
+      error: (e) => `Queue failed: ${e}`,
+    });
     loadAll();
   }
 
@@ -210,25 +272,87 @@ export function BookDetail({ bookId, onBack }: Props) {
     setChunks((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
   }
 
-  if (!book) return <p className="text-sm text-slate-500">Loading…</p>;
+  // ---- Keyboard shortcuts ----
+  const groups = book ? groupByChapter(chunks) : [];
+  const safeIdx = Math.min(activeChapterIdx, Math.max(0, groups.length - 1));
+  const activeGroup = groups[safeIdx];
+
+  // Filtered chunks in active chapter
+  function applyFilters(chks: Chunk[]): Chunk[] {
+    let result = chks;
+    if (statusFilter !== "all") {
+      if (statusFilter === "failed") {
+        result = result.filter((c) =>
+          c.editor_notes?.some((n) =>
+            n.startsWith("translation_failed") || n.startsWith("stage1_failed") || n.startsWith("stage2_failed")
+          )
+        );
+      } else {
+        result = result.filter((c) => c.status === statusFilter);
+      }
+    }
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.source_text.toLowerCase().includes(q) ||
+          (c.translated_text?.toLowerCase().includes(q) ?? false)
+      );
+    }
+    return result;
+  }
+
+  const visibleChunks = activeGroup ? applyFilters(activeGroup.chunks) : [];
+  const visibleChunkIds = visibleChunks.map((c) => c.id);
+
+  useChunkKeybindings({
+    enabled: activeView === "chunks",
+    chunkIds: visibleChunkIds,
+    focusedChunkId,
+    onFocus: setFocusedChunkId,
+    onTranslate: (id) => translateOne(id),
+    onApprove: (id) => updateChunk(id, { status: "approved" }),
+    onEdit: (id) => setEditRequestId(id),
+    onFocusSearch: () => searchInputRef.current?.focus(),
+    onHelp: () => setShowHelp((v) => !v),
+  });
+
+  if (!book) return <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>;
 
   const counts = chunks.reduce(
     (acc, c) => { acc[c.status]++; return acc; },
     { raw: 0, in_review: 0, approved: 0 } as Record<string, number>,
   );
+
+  // Counts for filter chips (total in chapter, not in current filter)
+  const chapterCounts: Record<StatusFilter, number> = {
+    all: activeGroup?.chunks.length ?? 0,
+    raw: activeGroup?.chunks.filter((c) => c.status === "raw").length ?? 0,
+    in_review: activeGroup?.chunks.filter((c) => c.status === "in_review").length ?? 0,
+    approved: activeGroup?.chunks.filter((c) => c.status === "approved").length ?? 0,
+    failed: activeGroup?.chunks.filter((c) =>
+      c.editor_notes?.some((n) =>
+        n.startsWith("translation_failed") || n.startsWith("stage1_failed") || n.startsWith("stage2_failed")
+      )
+    ).length ?? 0,
+  };
+
   const translatedCount = chunks.filter((c) => c.translated_text).length;
   const progressPct = chunks.length ? Math.round((translatedCount / chunks.length) * 100) : 0;
   const pendingCount = counts.raw;
 
-  const groups = groupByChapter(chunks);
-  const safeIdx = Math.min(activeChapterIdx, groups.length - 1);
-  const activeGroup = groups[safeIdx];
-
   return (
     <div className="space-y-4">
+      {/* Sticky batch progress bar */}
+      <BatchProgressBar
+        totalChunks={chunks.length}
+        translatedChunks={translatedCount}
+        lastBatchEvent={lastBatchEvent}
+      />
+
       {/* Top bar */}
       <div className="flex items-center gap-3 flex-wrap justify-between">
-        <button onClick={onBack} className="text-sm text-indigo-600 hover:underline shrink-0">
+        <button onClick={onBack} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline shrink-0">
           ← Back to library
         </button>
         <div className="flex items-center gap-3 flex-wrap">
@@ -236,25 +360,11 @@ export function BookDetail({ bookId, onBack }: Props) {
             <>
               {pipeline === "two_stage" ? (
                 <>
-                  <ModelPicker
-                    label="Stage 1 (Builder)"
-                    selected={stage1Model}
-                    onChange={setStage1Model}
-                    defaultModel={stageDefaults?.stage1}
-                  />
-                  <ModelPicker
-                    label="Stage 2 (Artist)"
-                    selected={stage2Model}
-                    onChange={setStage2Model}
-                    defaultModel={stageDefaults?.stage2}
-                  />
+                  <ModelPicker label="Stage 1 (Builder)" selected={stage1Model} onChange={setStage1Model} defaultModel={stageDefaults?.stage1} />
+                  <ModelPicker label="Stage 2 (Artist)" selected={stage2Model} onChange={setStage2Model} defaultModel={stageDefaults?.stage2} />
                 </>
               ) : (
-                <ModelPicker
-                  label="Model"
-                  selected={stage1Model}
-                  onChange={setStage1Model}
-                />
+                <ModelPicker label="Model" selected={stage1Model} onChange={setStage1Model} />
               )}
               {selectedIds.size > 0 ? (
                 <>
@@ -300,11 +410,11 @@ export function BookDetail({ bookId, onBack }: Props) {
                 onClick={() => exportAsTxt(book, chunks)}
                 disabled={translatedCount === 0}
                 title={translatedCount === 0 ? "No translations yet" : `Export ${translatedCount}/${chunks.length} chunks`}
-                className="border border-slate-300 hover:border-slate-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-sm rounded px-3 py-1.5"
+                className="border border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 dark:text-slate-300 text-sm rounded px-3 py-1.5"
               >
                 ↓ Export TXT
                 {translatedCount > 0 && translatedCount < chunks.length && (
-                  <span className="ml-1 text-xs text-amber-600">({translatedCount}/{chunks.length})</span>
+                  <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">({translatedCount}/{chunks.length})</span>
                 )}
               </button>
             </>
@@ -314,41 +424,38 @@ export function BookDetail({ bookId, onBack }: Props) {
 
       {/* Book title + stats */}
       <div>
-        <h1 className="text-xl font-bold tracking-tight">
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
           {book.title}{" "}
-          <span className="ml-2 align-middle text-xs font-medium text-slate-500 rounded bg-slate-100 px-2 py-0.5">
+          <span className="ml-2 align-middle text-xs font-medium text-slate-500 dark:text-slate-400 rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5">
             {book.source_language.toUpperCase()} → {book.target_language.toUpperCase()}
           </span>
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           {book.author ?? "Unknown author"} · {book.total_chunks} chunks ·{" "}
-          <span className="text-amber-600">{counts.raw} untranslated</span> ·{" "}
-          <span className="text-indigo-600">{counts.in_review} in review</span> ·{" "}
-          <span className="text-emerald-600">{counts.approved} approved</span>
+          <span className="text-amber-600 dark:text-amber-400">{counts.raw} untranslated</span> ·{" "}
+          <span className="text-indigo-600 dark:text-indigo-400">{counts.in_review} in review</span> ·{" "}
+          <span className="text-emerald-600 dark:text-emerald-400">{counts.approved} approved</span>
         </p>
         {chunks.length > 0 && (
           <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                style={{ width: `${progressPct}%` }}
-              />
+            <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
             </div>
-            <span className="text-xs text-slate-500 shrink-0">{progressPct}%</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 shrink-0">{progressPct}%</span>
           </div>
         )}
       </div>
 
       {/* View tabs */}
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
         {(["chunks", "analytics"] as ActiveView[]).map((view) => (
           <button
             key={view}
             onClick={() => setActiveView(view)}
             className={`px-4 py-2 text-sm font-medium rounded-t transition-colors ${
               activeView === view
-                ? "bg-white border border-b-white border-slate-200 -mb-px text-indigo-700"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-white dark:bg-slate-900 border border-b-white dark:border-b-slate-900 border-slate-200 dark:border-slate-700 -mb-px text-indigo-700 dark:text-indigo-400"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
             }`}
           >
             {view === "chunks" ? "Chunks" : "Analytics"}
@@ -357,24 +464,19 @@ export function BookDetail({ bookId, onBack }: Props) {
       </div>
 
       {error && (
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div className="rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-400">{error}</div>
       )}
 
-      {/* Analytics view */}
-      {activeView === "analytics" && (
-        <AnalyticsPage book={book} chunks={chunks} />
-      )}
+      {activeView === "analytics" && <AnalyticsPage book={book} chunks={chunks} />}
 
-      {/* Chunks view: sidebar + content */}
       {activeView === "chunks" && (
         <div className="flex gap-6 items-start">
-
           {/* Left sidebar: chapter list */}
-          <nav className="w-56 shrink-0 rounded-lg border border-slate-200 bg-white overflow-hidden sticky top-4">
-            <div className="px-3 py-2 border-b border-slate-100 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <nav className="w-56 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden sticky top-4">
+            <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Chapters
             </div>
-            <ul className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[70vh] overflow-y-auto">
               {groups.map((g, i) => {
                 const st = chapterStatus(g);
                 const isActive = i === safeIdx;
@@ -384,18 +486,19 @@ export function BookDetail({ bookId, onBack }: Props) {
                   <li key={i} className="group flex items-stretch">
                     <button
                       onClick={() => setActiveChapterIdx(i)}
-                      className={`flex-1 text-left px-3 py-2.5 flex items-start gap-2 hover:bg-slate-50 transition-colors min-w-0 ${isActive ? "bg-indigo-50 border-l-2 border-indigo-500" : ""}`}
+                      className={`flex-1 text-left px-3 py-2.5 flex items-start gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-w-0 ${isActive ? "bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500" : ""}`}
                     >
                       <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${
                         st === "all_approved" ? "bg-emerald-400" :
                         st === "partial" ? "bg-indigo-400" :
                         "bg-amber-300"
                       }`} />
+<<<<<<< HEAD
                       <div className="min-w-0">
-                        <div className={`text-sm leading-tight truncate ${isActive ? "font-semibold text-indigo-700" : "text-slate-700"}`}>
+                        <div className={`text-sm leading-tight truncate ${isActive ? "font-semibold text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-300"}`}>
                           {g.title}
                         </div>
-                        <div className="text-xs text-slate-400 mt-0.5">
+                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                           {g.chunks.length} chunk{g.chunks.length !== 1 ? "s" : ""}
                         </div>
                       </div>
@@ -445,12 +548,11 @@ export function BookDetail({ bookId, onBack }: Props) {
                 return (
                   <>
                     <div className="flex items-center justify-between gap-3">
-                      <h2 className="font-semibold text-slate-800 truncate">{activeGroup.title}</h2>
-                      <div className="flex items-center gap-3 text-xs text-slate-500 shrink-0">
+                      <h2 className="font-semibold text-slate-800 dark:text-slate-100 truncate">{activeGroup.title}</h2>
+                      <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 shrink-0">
                         <button
                           onClick={() => {
                             if (allSelected) {
-                              // Deselect just this chapter's chunks.
                               setSelectedIds((prev) => {
                                 const next = new Set(prev);
                                 for (const c of activeGroup.chunks) next.delete(c.id);
@@ -460,7 +562,7 @@ export function BookDetail({ bookId, onBack }: Props) {
                               selectChapter(activeGroup, "add");
                             }
                           }}
-                          className="text-indigo-600 hover:text-indigo-800 hover:underline"
+                          className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 hover:underline"
                         >
                           {allSelected ? "Deselect chapter" : "Select chapter"}
                         </button>
@@ -469,12 +571,32 @@ export function BookDetail({ bookId, onBack }: Props) {
                         </span>
                       </div>
                     </div>
-                    {activeGroup.chunks.map((c) => (
+
+                    {/* Filter bar */}
+                    <ChunkFilterBar
+                      statusFilter={statusFilter}
+                      searchText={searchText}
+                      onStatusChange={setStatusFilter}
+                      onSearchChange={setSearchText}
+                      counts={chapterCounts}
+                      searchInputRef={searchInputRef as React.RefObject<HTMLInputElement | null>}
+                    />
+
+                    {visibleChunks.length === 0 && (
+                      <p className="text-sm text-slate-400 dark:text-slate-500 italic py-4 text-center">
+                        No chunks match the current filter.
+                      </p>
+                    )}
+
+                    {visibleChunks.map((c) => (
                       <ChunkCard
                         key={c.id}
                         chunk={c}
                         book={book}
                         canTranslate={modelsReady}
+                        focused={focusedChunkId === c.id}
+                        requestEdit={editRequestId === c.id}
+                        onEditHandled={() => setEditRequestId(null)}
                         selected={selectedIds.has(c.id)}
                         onToggleSelect={() => toggleSelected(c.id)}
                         onTranslate={() => translateOne(c.id)}
@@ -490,12 +612,52 @@ export function BookDetail({ bookId, onBack }: Props) {
             <aside className="w-72 shrink-0 space-y-4 sticky top-4">
               <GlossaryPanel bookId={bookId} />
               {book.style_guide && (
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <h3 className="font-semibold mb-2 text-sm">Style guide</h3>
-                  <p className="text-sm whitespace-pre-wrap text-slate-700">{book.style_guide}</p>
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+                  <h3 className="font-semibold mb-2 text-sm text-slate-800 dark:text-slate-100">Style guide</h3>
+                  <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">{book.style_guide}</p>
                 </div>
               )}
             </aside>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard shortcuts help overlay */}
+      {showHelp && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 max-w-sm w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-semibold text-slate-800 dark:text-slate-100 mb-4">Keyboard shortcuts</h2>
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {[
+                  ["j / k", "Next / previous chunk"],
+                  ["t", "Translate focused chunk"],
+                  ["a", "Approve focused chunk"],
+                  ["e", "Edit focused chunk"],
+                  ["/", "Focus search bar"],
+                  ["?", "Toggle this help"],
+                ].map(([key, desc]) => (
+                  <tr key={key}>
+                    <td className="py-1.5 pr-4">
+                      <kbd className="font-mono text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded px-1.5 py-0.5">{key}</kbd>
+                    </td>
+                    <td className="py-1.5 text-slate-600 dark:text-slate-400">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button
+              onClick={() => setShowHelp(false)}
+              className="mt-4 text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+            >
+              Close (Esc or ?)
+            </button>
           </div>
         </div>
       )}

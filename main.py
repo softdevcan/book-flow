@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, inspect
 
-from app.api.endpoints import books, chunks, glossary, languages, models as models_endpoint
+from app.api.endpoints import books, chunks, events as events_endpoint, glossary, languages, models as models_endpoint
 from app.core.config import settings
 from app.models import Book, Chunk, GlossaryTerm  # noqa: F401  (register mappers)
 
@@ -58,6 +58,7 @@ app.add_middleware(
 
 app.include_router(books.router)
 app.include_router(chunks.router)
+app.include_router(events_endpoint.router)
 app.include_router(glossary.router)
 app.include_router(languages.router)
 app.include_router(models_endpoint.router)

@@ -11,6 +11,7 @@ from app.models.chunk import Chunk, ChunkStatus
 from app.models.glossary import GlossaryTerm
 from app.models.translation_version import TranslationVersion
 from app.schemas.translation import TranslationOutput
+from app.services import events as bus
 from app.services.llm import get_provider
 from app.services.llm.lang_rules import (
     language_name,
@@ -190,6 +191,13 @@ def _persist_translation(
         "translate_chunk: chunk %s translated (ratio=%.2f, version=%s)",
         chunk.id, ratio, version.id,
     )
+    bus.publish(chunk.book_id, {
+        "type": "chunk_updated",
+        "chunk_id": chunk.id,
+        "status": ChunkStatus.in_review.value,
+        "translated": True,
+        "failed": False,
+    })
 
 
 async def _run_two_stage(
@@ -282,12 +290,19 @@ def _mark_failed(db: Session, chunk: Chunk, note: str) -> None:
 
     Mirrors the failure write in translate_chunk so behavior is consistent.
     """
+    book_id = chunk.book_id
+    chunk_id = chunk.id
     db.rollback()
-    chunk = db.get(Chunk, chunk.id)
+    chunk = db.get(Chunk, chunk_id)
     if chunk is not None:
         chunk.status = ChunkStatus.raw
         chunk.editor_notes = json.dumps([note], ensure_ascii=False)
         db.commit()
+    bus.publish(book_id, {
+        "type": "chunk_failed",
+        "chunk_id": chunk_id,
+        "reason": note,
+    })
 
 
 def _append_note(db: Session, chunk: Chunk, note: str) -> None:
@@ -365,7 +380,9 @@ async def translate_book_batched(
             "translate_book_batched: book %s phase 1 (builder) model=%s chunks=%d",
             book_id, s1_model, len(pending),
         )
-        for chunk in pending:
+        total = len(pending)
+        bus.publish(book_id, {"type": "batch_progress", "phase": "stage1", "done": 0, "total": total})
+        for done_count, chunk in enumerate(pending, start=1):
             try:
                 system_prompt = build_system_prompt(book, glossary, chunk.scene_context)
                 user_prompt = f"<source_text>\n{chunk.source_text}\n</source_text>"
@@ -383,6 +400,7 @@ async def translate_book_batched(
                     book_id, chunk.id,
                 )
                 _mark_failed(db, chunk, f"stage1_failed: {exc}")
+            bus.publish(book_id, {"type": "batch_progress", "phase": "stage1", "done": done_count, "total": total})
 
         # ---- PHASE 2: Artist — model loaded once, all stage-1 drafts refined ----
         # Re-query: only chunks that cleared Phase 1 (tagged STAGE1_DONE_NOTE),
@@ -409,7 +427,9 @@ async def translate_book_batched(
             "translate_book_batched: book %s phase 2 (artist) model=%s chunks=%d",
             book_id, s2_model, len(stage1_done),
         )
-        for chunk in stage1_done:
+        total2 = len(stage1_done)
+        bus.publish(book_id, {"type": "batch_progress", "phase": "stage2", "done": 0, "total": total2})
+        for done_count2, chunk in enumerate(stage1_done, start=1):
             try:
                 stage2_system = build_stage2_system_prompt(
                     book, glossary, chunk.scene_context
@@ -433,6 +453,7 @@ async def translate_book_batched(
                     book_id, chunk.id,
                 )
                 _append_note(db, chunk, f"stage2_failed: {exc}")
+            bus.publish(book_id, {"type": "batch_progress", "phase": "stage2", "done": done_count2, "total": total2})
 
         logger.info("translate_book_batched: book %s done", book_id)
 
@@ -487,8 +508,13 @@ async def translate_chunk(
             db.rollback()
             chunk = db.get(Chunk, chunk_id)
             if chunk is not None:
+                book_id_for_event = chunk.book_id
                 chunk.status = ChunkStatus.raw
-                chunk.editor_notes = json.dumps(
-                    [f"translation_failed: {exc}"], ensure_ascii=False
-                )
+                note = f"translation_failed: {exc}"
+                chunk.editor_notes = json.dumps([note], ensure_ascii=False)
                 db.commit()
+                bus.publish(book_id_for_event, {
+                    "type": "chunk_failed",
+                    "chunk_id": chunk_id,
+                    "reason": note,
+                })

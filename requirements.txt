@@ -14,3 +14,4 @@ lxml>=5.3
 alembic>=1.13
 lingua-language-detector>=2.0
 regex>=2024.5
+sse-starlette>=2.1
