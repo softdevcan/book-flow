@@ -76,26 +76,26 @@ export function GlossaryPanel({ bookId }: Props) {
           {error}
         </p>
       ) : null}
-      <form onSubmit={handleSubmit} className="flex gap-2 mb-3">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2 mb-3">
         <input
           value={src}
           onChange={(e) => setSrc(e.target.value)}
-          placeholder="source"
-          className="flex-1 text-sm border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          placeholder="Source term"
+          className="w-full text-sm border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
           disabled={isLoading}
           aria-label="Source term"
         />
         <input
           value={tgt}
           onChange={(e) => setTgt(e.target.value)}
-          placeholder="target"
-          className="flex-1 text-sm border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          placeholder="Target term"
+          className="w-full text-sm border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
           disabled={isLoading}
           aria-label="Target term"
         />
         <button
           type="submit"
-          className="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded px-3 py-1 disabled:opacity-50 hover:bg-slate-700 dark:hover:bg-slate-600"
+          className="w-full text-sm bg-slate-800 dark:bg-slate-700 text-white rounded px-3 py-1 disabled:opacity-50 hover:bg-slate-700 dark:hover:bg-slate-600"
           disabled={isLoading}
         >
           Add
