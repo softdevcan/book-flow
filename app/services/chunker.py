@@ -20,13 +20,26 @@ import re
 _PARAGRAPH_SPLIT = re.compile(r"\n\s*\n+")
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?…])\s+(?=[A-ZÇĞİÖŞÜ\"'\(])")
 
-# Lines that look like explicit structural headings force a chunk boundary.
-# Deliberately conservative: only matches known heading keywords + number/name.
-# Does NOT match generic short or ALL-CAPS lines — too many false positives in
-# literary prose (scene openers, epigraphs, one-line paragraphs, etc.).
+# Lines that force a chunk boundary.
+# Two flavours are recognised:
+#   1. Any Markdown ATX heading line ("# …", "## …", "### …").  The PDF
+#      parser produces these for chapter/part markers detected via the PDF
+#      outline or its own multi-language heading classifier — so the chunker
+#      doesn't need to second-guess the heading text.
+#   2. Plain-text headings still present in EPUB / TXT / DOCX inputs that
+#      use known multilingual keywords ("Chapter 3", "Bölüm 5", "Capítulo
+#      II", …) without Markdown prefixes.
 _HEADING = re.compile(
-    r"^(?:chapter|bölüm|part|kısım|section|prologue|epilogue|prolog|epilog"
-    r"|önsöz|giriş|sonuç)\b[\s\d\w:.\-–—]*$",
+    r"^(?:"
+    r"#{1,6}\s+\S.*"
+    r"|(?:chapter|chap\.?|part|book|section|prologue|epilogue|prolog|epilog"
+    r"|bölüm|kısım|önsöz|giriş|sonuç"
+    r"|capítulo|capitulo|parte"
+    r"|kapitel|teil|abschnitt"
+    r"|chapitre|partie"
+    r"|глава|часть)"
+    r"\b[\s\d\w:.\-–—']*"
+    r")$",
     re.IGNORECASE,
 )
 

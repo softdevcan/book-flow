@@ -302,6 +302,7 @@ async def translate_book_batched(
     provider_name: str | None = None,
     stage1_model: str | None = None,
     stage2_model: str | None = None,
+    chunk_ids: list[int] | None = None,
 ) -> None:
     """Two-stage translation batched BY STAGE rather than by chunk.
 
@@ -313,9 +314,14 @@ async def translate_book_batched(
     Resilient: a chunk that fails Phase 1 is marked failed and skipped; Phase 2
     only processes chunks tagged STAGE1_DONE_NOTE. Phase-2 failures keep the
     Phase-1 draft and just append a stage2_failed note.
+
+    If ``chunk_ids`` is given, only those chunks (still scoped to ``book_id``)
+    are processed — and the approved-only skip is dropped so the user can
+    explicitly re-translate even an approved chunk.
     """
     s1_model = stage1_model or settings.OLLAMA_STAGE1_MODEL
     s2_model = stage2_model or settings.OLLAMA_STAGE2_MODEL
+    id_filter = set(chunk_ids) if chunk_ids else None
 
     with SessionLocal() as db:
         book = db.get(Book, book_id)
@@ -325,16 +331,18 @@ async def translate_book_batched(
         glossary = list(db.query(GlossaryTerm).filter_by(book_id=book_id).all())
         style_guide = book.style_guide
 
-        pending = [
-            c
-            for c in (
-                db.query(Chunk)
-                .filter_by(book_id=book_id)
-                .order_by(Chunk.sequence_number.asc())
-                .all()
-            )
-            if c.status != ChunkStatus.approved
-        ]
+        all_chunks = (
+            db.query(Chunk)
+            .filter_by(book_id=book_id)
+            .order_by(Chunk.sequence_number.asc())
+            .all()
+        )
+        if id_filter is not None:
+            # Explicit selection: honor it as-is (even approved chunks).
+            pending = [c for c in all_chunks if c.id in id_filter]
+        else:
+            pending = [c for c in all_chunks if c.status != ChunkStatus.approved]
+
         if not pending:
             logger.info("translate_book_batched: book %s has no pending chunks", book_id)
             return
@@ -365,7 +373,9 @@ async def translate_book_batched(
                 _mark_failed(db, chunk, f"stage1_failed: {exc}")
 
         # ---- PHASE 2: Artist — model loaded once, all stage-1 drafts refined ----
-        # Re-query: only chunks that cleared Phase 1 (tagged STAGE1_DONE_NOTE).
+        # Re-query: only chunks that cleared Phase 1 (tagged STAGE1_DONE_NOTE),
+        # still scoped to the same selection so a selective run doesn't sweep
+        # in unrelated chunks that happened to be tagged from a previous run.
         stage1_done = [
             c
             for c in (
@@ -374,7 +384,9 @@ async def translate_book_batched(
                 .order_by(Chunk.sequence_number.asc())
                 .all()
             )
-            if c.editor_notes and STAGE1_DONE_NOTE in c.editor_notes
+            if c.editor_notes
+            and STAGE1_DONE_NOTE in c.editor_notes
+            and (id_filter is None or c.id in id_filter)
         ]
         if not stage1_done:
             logger.warning("translate_book_batched: book %s no chunks survived phase 1", book_id)
