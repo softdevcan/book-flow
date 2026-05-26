@@ -32,6 +32,12 @@ class TranslateRequest(BaseModel):
     stage1_model: str | None = None
     stage2_model: str | None = None
 
+
+class TranslateChunksRequest(TranslateRequest):
+    # Explicit subset of chunks to translate. Must all belong to the same book;
+    # rejected with 400 if they're split across books or any id is unknown.
+    chunk_ids: list[int]
+
 router = APIRouter(tags=["chunks"])
 
 
@@ -214,6 +220,68 @@ def trigger_translate_book(
                 model=overrides.model,
                 stage1_model=overrides.stage1_model,
                 stage2_model=overrides.stage2_model,
+            )
+    return chunks
+
+
+@router.post(
+    "/api/chunks/translate-selection",
+    response_model=list[ChunkRead],
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def trigger_translate_chunks(
+    payload: TranslateChunksRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> list[Chunk]:
+    """Queue translation for an explicit subset of chunks.
+
+    All chunk_ids must belong to the same book.  Two-stage mode dispatches a
+    single batched task (one model swap), single-pass mode dispatches one task
+    per chunk.  Approved chunks ARE included if the caller explicitly listed
+    them — overriding the book-level "skip approved" default.
+    """
+    if not payload.chunk_ids:
+        raise HTTPException(status_code=400, detail="chunk_ids is empty")
+    _require_models(payload)
+
+    chunks = (
+        db.query(Chunk)
+        .filter(Chunk.id.in_(payload.chunk_ids))
+        .order_by(Chunk.sequence_number.asc())
+        .all()
+    )
+    if len(chunks) != len(set(payload.chunk_ids)):
+        raise HTTPException(
+            status_code=400,
+            detail="One or more chunk_ids do not exist",
+        )
+    book_ids = {c.book_id for c in chunks}
+    if len(book_ids) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="chunk_ids must all belong to the same book",
+        )
+    book_id = book_ids.pop()
+
+    if settings.TRANSLATION_PIPELINE == "two_stage":
+        background_tasks.add_task(
+            translate_book_batched,
+            book_id,
+            provider_name=payload.provider,
+            stage1_model=payload.stage1_model or payload.model,
+            stage2_model=payload.stage2_model,
+            chunk_ids=[c.id for c in chunks],
+        )
+    else:
+        for c in chunks:
+            background_tasks.add_task(
+                translate_chunk,
+                c.id,
+                provider_name=payload.provider,
+                model=payload.model,
+                stage1_model=payload.stage1_model,
+                stage2_model=payload.stage2_model,
             )
     return chunks
 

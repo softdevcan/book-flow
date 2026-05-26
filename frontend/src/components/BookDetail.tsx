@@ -23,6 +23,30 @@ interface ChapterGroup {
   chunks: Chunk[];
 }
 
+// Heading patterns that the backend's text_structure classifier emits, plus
+// the Markdown ## form that every parser now produces. Kept in sync with
+// app/services/chunker.py — if you add a language there, mirror it here.
+const HEADING_KEYWORDS =
+  "chapter|chap\\.?|part|book|section|prologue|epilogue|prolog|epilog" +
+  "|bölüm|kısım|önsöz|giriş|sonuç" +
+  "|capítulo|capitulo|parte" +
+  "|kapitel|teil|abschnitt" +
+  "|chapitre|partie" +
+  "|глава|часть";
+
+const HEADING_RE = new RegExp(
+  `^(?:` +
+    // Markdown headings ("## …") emitted by every backend parser
+    `#{1,6}\\s+\\S.*` +
+    `|(?:${HEADING_KEYWORDS})\\b[\\s\\d\\w:.\\-–—']*` +
+  `)$`,
+  "i",
+);
+
+function stripMarkdownPrefix(line: string): string {
+  return line.replace(/^#{1,6}\s+/, "").trim();
+}
+
 function groupByChapter(chunks: Chunk[]): ChapterGroup[] {
   const groups: ChapterGroup[] = [];
   let current: ChapterGroup = { title: "Introduction", chunks: [] };
@@ -30,14 +54,11 @@ function groupByChapter(chunks: Chunk[]): ChapterGroup[] {
   for (const chunk of chunks) {
     const lines = chunk.source_text.trim().split("\n");
     const firstLine = lines[0].trim();
-    const isHeading =
-      /^(chapter|bölüm|part|kısım|section|prologue|epilogue|prolog|epilog|önsöz|giriş|sonuç)\b/i.test(
-        firstLine
-      ) && firstLine.length <= 80 && !firstLine.includes(".");
+    const isHeading = firstLine.length <= 80 && HEADING_RE.test(firstLine);
 
     if (isHeading) {
       if (current.chunks.length > 0) groups.push(current);
-      current = { title: firstLine, chunks: [chunk] };
+      current = { title: stripMarkdownPrefix(firstLine), chunks: [chunk] };
     } else {
       current.chunks.push(chunk);
     }
@@ -111,8 +132,32 @@ export function BookDetail({ bookId, onBack }: Props) {
   const [editRequestId, setEditRequestId] = useState<number | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [lastBatchEvent, setLastBatchEvent] = useState<ChunkEvent | null>(null);
+  // Set of chunk ids the user has manually picked for batch translation.
+  // Cleared after a successful translate-selection request.
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const pollRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectChapter(chapter: ChapterGroup, mode: "add" | "only") {
+    setSelectedIds((prev) => {
+      const next = mode === "only" ? new Set<number>() : new Set(prev);
+      for (const c of chapter.chunks) next.add(c.id);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
 
   async function loadAll() {
     try {
@@ -204,6 +249,18 @@ export function BookDetail({ bookId, onBack }: Props) {
       error: (e) => `Queue failed: ${e}`,
     });
     loadAll();
+  }
+
+  async function translateSelected() {
+    if (selectedIds.size === 0) return;
+    setTranslating(true);
+    try {
+      await api.translateChunks(Array.from(selectedIds), translateOverrides());
+      clearSelection();
+      loadAll();
+    } finally {
+      setTranslating(false);
+    }
   }
 
   async function updateChunk(id: number, patch: Partial<Chunk>) {
@@ -309,20 +366,46 @@ export function BookDetail({ bookId, onBack }: Props) {
               ) : (
                 <ModelPicker label="Model" selected={stage1Model} onChange={setStage1Model} />
               )}
-              <button
-                onClick={translateAll}
-                disabled={translating || pendingCount === 0 || !modelsReady}
-                title={!modelsReady ? "Select a model for both Stage 1 and Stage 2 first" : undefined}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded px-3 py-1.5 flex items-center gap-1.5"
-              >
-                {translating && (
-                  <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                )}
-                {translating ? "Queuing…" : pendingCount > 0 ? `Translate ${pendingCount} pending` : "All translated"}
-              </button>
+              {selectedIds.size > 0 ? (
+                <>
+                  <button
+                    onClick={translateSelected}
+                    disabled={translating || !modelsReady}
+                    title={!modelsReady ? "Select a model for both Stage 1 and Stage 2 first" : undefined}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded px-3 py-1.5 flex items-center gap-1.5"
+                  >
+                    {translating && (
+                      <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                    )}
+                    {translating ? "Queuing…" : `Translate ${selectedIds.size} selected`}
+                  </button>
+                  <button
+                    onClick={clearSelection}
+                    disabled={translating}
+                    className="text-sm text-slate-600 hover:text-slate-800 disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={translateAll}
+                  disabled={translating || pendingCount === 0 || !modelsReady}
+                  title={!modelsReady ? "Select a model for both Stage 1 and Stage 2 first" : undefined}
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded px-3 py-1.5 flex items-center gap-1.5"
+                >
+                  {translating && (
+                    <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                  )}
+                  {translating ? "Queuing…" : pendingCount > 0 ? `Translate ${pendingCount} pending` : "All translated"}
+                </button>
+              )}
               <button
                 onClick={() => exportAsTxt(book, chunks)}
                 disabled={translatedCount === 0}
@@ -397,25 +480,59 @@ export function BookDetail({ bookId, onBack }: Props) {
               {groups.map((g, i) => {
                 const st = chapterStatus(g);
                 const isActive = i === safeIdx;
+                const allSelected = g.chunks.every((c) => selectedIds.has(c.id));
+                const someSelected = !allSelected && g.chunks.some((c) => selectedIds.has(c.id));
                 return (
-                  <li key={i}>
+                  <li key={i} className="group flex items-stretch">
                     <button
                       onClick={() => setActiveChapterIdx(i)}
-                      className={`w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${isActive ? "bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500" : ""}`}
+                      className={`flex-1 text-left px-3 py-2.5 flex items-start gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-w-0 ${isActive ? "bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500" : ""}`}
                     >
                       <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${
                         st === "all_approved" ? "bg-emerald-400" :
                         st === "partial" ? "bg-indigo-400" :
                         "bg-amber-300"
                       }`} />
-                      <div>
-                        <div className={`text-sm leading-tight ${isActive ? "font-semibold text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-300"}`}>
+<<<<<<< HEAD
+                      <div className="min-w-0">
+                        <div className={`text-sm leading-tight truncate ${isActive ? "font-semibold text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-300"}`}>
                           {g.title}
                         </div>
                         <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                           {g.chunks.length} chunk{g.chunks.length !== 1 ? "s" : ""}
                         </div>
                       </div>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (allSelected) {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            for (const c of g.chunks) next.delete(c.id);
+                            return next;
+                          });
+                        } else {
+                          selectChapter(g, "add");
+                        }
+                      }}
+                      title={allSelected ? "Deselect chapter" : "Select all chunks in chapter"}
+                      className={`shrink-0 px-2 flex items-center justify-center transition-opacity ${
+                        allSelected || someSelected
+                          ? "opacity-100 text-indigo-600"
+                          : "opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-600"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someSelected;
+                        }}
+                        readOnly
+                        tabIndex={-1}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 pointer-events-none"
+                      />
                     </button>
                   </li>
                 );
@@ -426,47 +543,70 @@ export function BookDetail({ bookId, onBack }: Props) {
           {/* Right: active chapter chunks + glossary */}
           <div className="flex-1 min-w-0 flex gap-6 items-start">
             <section className="flex-1 min-w-0 space-y-4">
-              {activeGroup && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-semibold text-slate-800 dark:text-slate-100">{activeGroup.title}</h2>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {activeGroup.chunks.filter((c) => c.translated_text).length}/{activeGroup.chunks.length} translated
-                    </span>
-                  </div>
+              {activeGroup && (() => {
+                const allSelected = activeGroup.chunks.every((c) => selectedIds.has(c.id));
+                return (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="font-semibold text-slate-800 dark:text-slate-100 truncate">{activeGroup.title}</h2>
+                      <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 shrink-0">
+                        <button
+                          onClick={() => {
+                            if (allSelected) {
+                              setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                for (const c of activeGroup.chunks) next.delete(c.id);
+                                return next;
+                              });
+                            } else {
+                              selectChapter(activeGroup, "add");
+                            }
+                          }}
+                          className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 hover:underline"
+                        >
+                          {allSelected ? "Deselect chapter" : "Select chapter"}
+                        </button>
+                        <span>
+                          {activeGroup.chunks.filter((c) => c.translated_text).length}/{activeGroup.chunks.length} translated
+                        </span>
+                      </div>
+                    </div>
 
-                  {/* Filter bar */}
-                  <ChunkFilterBar
-                    statusFilter={statusFilter}
-                    searchText={searchText}
-                    onStatusChange={setStatusFilter}
-                    onSearchChange={setSearchText}
-                    counts={chapterCounts}
-                    searchInputRef={searchInputRef as React.RefObject<HTMLInputElement | null>}
-                  />
-
-                  {visibleChunks.length === 0 && (
-                    <p className="text-sm text-slate-400 dark:text-slate-500 italic py-4 text-center">
-                      No chunks match the current filter.
-                    </p>
-                  )}
-
-                  {visibleChunks.map((c) => (
-                    <ChunkCard
-                      key={c.id}
-                      chunk={c}
-                      book={book}
-                      canTranslate={modelsReady}
-                      focused={focusedChunkId === c.id}
-                      requestEdit={editRequestId === c.id}
-                      onEditHandled={() => setEditRequestId(null)}
-                      onTranslate={() => translateOne(c.id)}
-                      onUpdate={(patch) => updateChunk(c.id, patch)}
-                      onChunkReplaced={replaceChunk}
+                    {/* Filter bar */}
+                    <ChunkFilterBar
+                      statusFilter={statusFilter}
+                      searchText={searchText}
+                      onStatusChange={setStatusFilter}
+                      onSearchChange={setSearchText}
+                      counts={chapterCounts}
+                      searchInputRef={searchInputRef as React.RefObject<HTMLInputElement | null>}
                     />
-                  ))}
-                </>
-              )}
+
+                    {visibleChunks.length === 0 && (
+                      <p className="text-sm text-slate-400 dark:text-slate-500 italic py-4 text-center">
+                        No chunks match the current filter.
+                      </p>
+                    )}
+
+                    {visibleChunks.map((c) => (
+                      <ChunkCard
+                        key={c.id}
+                        chunk={c}
+                        book={book}
+                        canTranslate={modelsReady}
+                        focused={focusedChunkId === c.id}
+                        requestEdit={editRequestId === c.id}
+                        onEditHandled={() => setEditRequestId(null)}
+                        selected={selectedIds.has(c.id)}
+                        onToggleSelect={() => toggleSelected(c.id)}
+                        onTranslate={() => translateOne(c.id)}
+                        onUpdate={(patch) => updateChunk(c.id, patch)}
+                        onChunkReplaced={replaceChunk}
+                      />
+                    ))}
+                  </>
+                );
+              })()}
             </section>
 
             <aside className="w-72 shrink-0 space-y-4 sticky top-4">
