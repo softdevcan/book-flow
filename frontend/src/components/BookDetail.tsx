@@ -493,7 +493,6 @@ export function BookDetail({ bookId, onBack }: Props) {
                         st === "partial" ? "bg-indigo-400" :
                         "bg-amber-300"
                       }`} />
-<<<<<<< HEAD
                       <div className="min-w-0">
                         <div className={`text-sm leading-tight truncate ${isActive ? "font-semibold text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-300"}`}>
                           {g.title}
