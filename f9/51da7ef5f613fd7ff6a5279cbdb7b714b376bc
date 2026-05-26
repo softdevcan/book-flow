@@ -1,0 +1,89 @@
+frontend/tsconfig.json
+  s_12c299531f1575::t_62183e66c1df54 16-17
+frontend/src/App.tsx
+  s_12c299531f1575::t_b74781e778e504 4,10-11,20-25,37
+app/api/endpoints/events.py
+  s_12c299531f1575::t_9391760b0a5162 30,48
+  s_12c299531f1575::t_31bdb6e60bf7a8 1-29,31-47,49-51
+app/api/endpoints/chunks.py
+  s_12c299531f1575::t_0a8d1854dbcb7a 19
+  s_12c299531f1575::t_1d47d4d15dfda8 134-140
+docs/ux-realtime-upgrade-plan.md
+  s_c446e78148de61::t_3b93a3ca8d9cbe 1-278
+frontend/src/components/GlossaryPanel.tsx
+  s_12c299531f1575::t_0d437317df49ac 69-71,75,84,92,98,105,107,113,115,117,122
+frontend/src/theme.tsx
+  s_12c299531f1575::t_abbbacb10ee22e 1-45
+frontend/src/components/BatchProgressBar.tsx
+  s_12c299531f1575::t_cf84655d953b8a 2-56
+requirements.txt
+  s_12c299531f1575::t_9a46955cdd42d6 17
+frontend/tailwind.config.js
+  s_12c299531f1575::t_784576deb549cb 4
+app/services/events.py
+  s_12c299531f1575::t_e40b67c9cffa6a 1-16,18-23,30,32-35,37,44-47,49,52-53,57
+  s_12c299531f1575::t_83e2048f5e6532 17
+  s_12c299531f1575::t_badc9d17c66a61 24-29,31,36,38-43,48,50-51,54-56,58-64
+frontend/src/components/AnalyticsPage.tsx
+  s_12c299531f1575::t_b5baad66aeab37 24,70-71,77-78,80,86,91,97-98,101,108-111,114-116,119,122,125,128,131,134,143-144,147-148,151-152,155-156,160-161,163,170,172-174,177-179,185-186,191-193,196-209,211-223,226-227,236,244-246,251,258,263-265,268,272,274-275
+app/services/translator.py
+  s_12c299531f1575::t_a57e3c44e7f4b5 418-420,444
+  s_12c299531f1575::t_cc08ede42f3883 499,501-502,504-508
+  s_12c299531f1575::t_896a71d0a0fc4c 194-200
+  s_12c299531f1575::t_71176926397fd8 293-294,296,301-305
+  s_12c299531f1575::t_7fb0ecc0eb14da 14
+  s_12c299531f1575::t_6823fc75482167 375-377,395
+frontend/src/components/VersionDiffModal.tsx
+  s_12c299531f1575::t_1c803dd2881efc 1-126
+frontend/src/hooks/useChunkEvents.ts
+  s_12c299531f1575::t_1f74be856e5870 1-40,42-55
+frontend/src/hooks/useChunkKeybindings.ts
+  s_12c299531f1575::t_09d8499499436a 1-66,68-71,73-76,78-81,83-86,88-96,98-103
+main.py
+  s_12c299531f1575::t_e179f6d3c590e6 61
+  s_12c299531f1575::t_0e847ec85271df 11
+frontend/src/components/BookList.tsx
+  s_12c299531f1575::t_8dc17d98ffc1e5 2,24,27,52-53,60,66,68,72,77,80-81,90,94
+frontend/package.json
+  s_12c299531f1575::t_2145bca05e06b3 12,14-15,18
+frontend/src/components/ThemeToggle.tsx
+  s_12c299531f1575::t_e31f7ff7fffcd8 1-35
+frontend/src/components/ChunkCard.tsx
+  s_12c299531f1575::t_c5d2d016102823 1-2,5,16-20,24-26,36-38,44-45,47-68,82-90,106-118,120-129,131-134,136,138,140-141,143,147,149-166,168-169,171,174-216,218-289,291-301
+frontend/src/components/BookDetail.tsx
+  s_12c299531f1575::t_01e390f967e2dd 1-2,9-12,76-96,108-113,115,139,151-179,182,189,191-192,199-205,218-263,269-282,289-295,298,306-307,310,330,334,344,346,350,352-354,358-359,361,367,374-375,384,387,392-393,396,404,412,415,432-433,437-454,460-462,475-477,484-520
+frontend/src/components/ModelPicker.tsx
+  s_12c299531f1575::t_61c39a6255fea2 51,55,69,76,82
+frontend/tsconfig.tsbuildinfo
+  s_12c299531f1575::t_147b2fefcf4057 1
+frontend/src/components/ChunkFilterBar.tsx
+  s_12c299531f1575::t_806277f99c1464 1-98
+frontend/.gitignore
+  s_12c299531f1575::t_1cdf2eb230c780 6-9
+frontend/src/components/UploadForm.tsx
+  s_12c299531f1575::t_a5d99e538d82bd 2,52,85-87,97-99,119,121-122,130,138,148,156,173,180,189,200,215-216,224,231,233-238,247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "f951da7ef5f613fd7ff6a5279cbdb7b714b376bc",
+  "prompts": {},
+  "sessions": {
+    "s_12c299531f1575": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9db9f45f-b37e-434f-89bf-7964e1227f17",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "softdevcan <akyildirimcan@gmail.com>"
+    },
+    "s_c446e78148de61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1c526107-6cd7-452c-8407-ca96aaf2ae8d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  }
+}
