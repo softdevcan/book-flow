@@ -11,6 +11,10 @@ interface Props {
   onChunkReplaced?: (chunk: Chunk) => void;
   /** False when no model is selected yet (two-stage needs both stages). */
   canTranslate?: boolean;
+  /** Whether this chunk is currently in the multi-select set. */
+  selected?: boolean;
+  /** Toggle selection; omit to hide the checkbox entirely. */
+  onToggleSelect?: () => void;
 }
 
 const statusStyles: Record<ChunkStatus, string> = {
@@ -26,6 +30,8 @@ export function ChunkCard({
   onUpdate,
   onChunkReplaced,
   canTranslate = true,
+  selected = false,
+  onToggleSelect,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(chunk.translated_text ?? "");
@@ -62,9 +68,22 @@ export function ChunkCard({
   }
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+    <article
+      className={`rounded-lg border bg-white overflow-hidden transition-colors ${
+        selected ? "border-indigo-400 ring-1 ring-indigo-200" : "border-slate-200"
+      }`}
+    >
       <header className="flex items-center justify-between px-4 py-2 border-b border-slate-100 bg-slate-50">
         <div className="flex items-center gap-3">
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelect}
+              aria-label={`Select chunk ${chunk.sequence_number}`}
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+          )}
           <span className="text-xs font-mono text-slate-500">
             #{chunk.sequence_number}
           </span>

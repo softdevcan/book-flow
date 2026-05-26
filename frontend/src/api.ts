@@ -69,6 +69,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(overrides),
     }),
+  translateChunks: (chunkIds: number[], overrides: TranslateOverrides) =>
+    request<Chunk[]>(`/chunks/translate-selection`, {
+      method: "POST",
+      body: JSON.stringify({ ...overrides, chunk_ids: chunkIds }),
+    }),
 
   listVersions: (chunkId: number) =>
     request<TranslationVersion[]>(`/chunks/${chunkId}/versions`),
