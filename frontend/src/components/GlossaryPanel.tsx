@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { api } from "../api";
 import type { GlossaryTerm } from "../types";
 
@@ -10,27 +11,58 @@ export function GlossaryPanel({ bookId }: Props) {
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
   const [src, setSrc] = useState("");
   const [tgt, setTgt] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  async function load() {
-    setTerms(await api.listGlossary(bookId));
-  }
+  const load = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      setError(null);
+      if (!silent) setIsLoading(true);
+      try {
+        setTerms(await api.listGlossary(bookId));
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to load glossary.";
+        setError(message);
+        setTerms([]);
+      } finally {
+        if (!silent) setIsLoading(false);
+      }
+    },
+    [bookId],
+  );
 
   useEffect(() => {
-    load();
-  }, [bookId]);
+    void load();
+  }, [load]);
 
-  async function add(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!src.trim() || !tgt.trim()) return;
-    await api.addGlossaryTerm(bookId, src.trim(), tgt.trim());
-    setSrc("");
-    setTgt("");
-    load();
+    setError(null);
+    try {
+      await api.addGlossaryTerm(bookId, src.trim(), tgt.trim());
+      setSrc("");
+      setTgt("");
+      await load({ silent: true });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to add glossary term.";
+      setError(message);
+    }
   }
 
-  async function remove(id: number) {
-    await api.deleteGlossaryTerm(id);
-    load();
+  async function handleRemove(id: number) {
+    setError(null);
+    try {
+      await api.deleteGlossaryTerm(id);
+      await load({ silent: true });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to remove glossary term.";
+      setError(message);
+    }
   }
 
   return (
@@ -39,24 +71,39 @@ export function GlossaryPanel({ bookId }: Props) {
       <p className="text-xs text-slate-500 mb-3">
         Strict translations applied to every chunk.
       </p>
-      <form onSubmit={add} className="flex gap-2 mb-3">
+      {error ? (
+        <p className="text-xs text-red-600 mb-3" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <form onSubmit={handleSubmit} className="flex gap-2 mb-3">
         <input
           value={src}
           onChange={(e) => setSrc(e.target.value)}
           placeholder="source"
           className="flex-1 text-sm border border-slate-300 rounded px-2 py-1"
+          disabled={isLoading}
+          aria-label="Source term"
         />
         <input
           value={tgt}
           onChange={(e) => setTgt(e.target.value)}
           placeholder="target"
           className="flex-1 text-sm border border-slate-300 rounded px-2 py-1"
+          disabled={isLoading}
+          aria-label="Target term"
         />
-        <button className="text-sm bg-slate-800 text-white rounded px-3">
+        <button
+          type="submit"
+          className="text-sm bg-slate-800 text-white rounded px-3 py-1 disabled:opacity-50"
+          disabled={isLoading}
+        >
           Add
         </button>
       </form>
-      {terms.length === 0 ? (
+      {isLoading ? (
+        <p className="text-xs text-slate-400">Loading glossary…</p>
+      ) : terms.length === 0 ? (
         <p className="text-xs text-slate-400">No terms yet.</p>
       ) : (
         <ul className="space-y-1 max-h-48 overflow-y-auto">
@@ -70,7 +117,8 @@ export function GlossaryPanel({ bookId }: Props) {
                 <span className="text-indigo-700">{t.target_term}</span>
               </span>
               <button
-                onClick={() => remove(t.id)}
+                type="button"
+                onClick={() => void handleRemove(t.id)}
                 className="text-xs text-red-500 hover:underline"
               >
                 remove

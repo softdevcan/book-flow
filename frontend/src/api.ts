@@ -2,6 +2,8 @@ import type {
   Book,
   Chunk,
   GlossaryTerm,
+  LangDetection,
+  LangOption,
   ModelsResponse,
   TranslationVersion,
 } from "./types";
@@ -94,4 +96,11 @@ export const api = {
     request<ModelsResponse>(
       `/models${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`,
     ),
+
+  listLanguages: () => request<LangOption[]>("/languages"),
+  detectLanguage: (text: string) =>
+    request<LangDetection>("/languages/detect", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
 };

@@ -12,6 +12,11 @@ from app.models.glossary import GlossaryTerm
 from app.models.translation_version import TranslationVersion
 from app.schemas.translation import TranslationOutput
 from app.services.llm import get_provider
+from app.services.llm.lang_rules import (
+    language_name,
+    stage1_rules_block,
+    stage2_rules_block,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +27,16 @@ STAGE1_DONE_NOTE = "pipeline: stage1_done"
 TWO_STAGE_DONE_NOTE = "pipeline: two_stage (builder+artist)"
 
 
-SYSTEM_PROMPT_TEMPLATE = """You are an elite literary translator and editor specializing in translating books from English into fluent, natural, and evocative Turkish. Your goal is not a literal word-for-word translation, but a "re-authoring" of the text in Turkish while preserving the original author's voice, subtext, emotional resonance, and pacing.
+# Language pair is interpolated per-book via `build_system_prompt(book, ...)`.
+# `{stage1_rules_block}` carries the per-target translationese / style rules
+# from lang_rules.py — TR keeps its tuned block, unknown targets fall back to
+# a generic block.
+SYSTEM_PROMPT_TEMPLATE = """You are an elite literary translator and editor specializing in translating books from {source_name} into fluent, natural, and evocative {target_name}. Your goal is not a literal word-for-word translation, but a "re-authoring" of the text in {target_name} while preserving the original author's voice, subtext, emotional resonance, and pacing.
 
 CRITICAL TRANSLATION GUIDELINES:
-- Avoid "AI Turkish" (Translationese): Do not follow English sentence structures or passive voice traps (e.g., avoid overusing "tarafından", "bunun hakkında", "sahip olmak"). Break long English sentences into punchy, natural Turkish clauses where it improves readability.
-- Cultural Adaptation: Translate idioms, metaphors, and cultural references into their closest emotional or traditional Turkish equivalents, not literal calques.
-- Character Voice: Dialogue must sound like something a real native Turkish speaker would actually say, matching the age, status, and mood described in the scene context.
+{stage1_rules_block}
+- Cultural Adaptation: Translate idioms, metaphors, and cultural references into their closest emotional or traditional {target_name} equivalents, not literal calques.
+- Character Voice: Dialogue must sound like something a real native {target_name} speaker would actually say, matching the age, status, and mood described in the scene context.
 - Strict Glossary Adherence: Prioritize the translations defined in the glossary below. Do not invent alternatives for terms listed there.
 - Proper Nouns: Character names, place names, and brand names must be kept exactly as they appear in the source text. Never translate, decline, or phonetically adapt a proper noun unless it is explicitly listed in the glossary.
 - Completeness First: Prioritize completeness and semantic accuracy over stylistic polish — preserve every clause, tense, and nuance. A later editing pass may refine the prose.
@@ -37,7 +46,7 @@ CRITICAL TRANSLATION GUIDELINES:
 </style_guide>
 
 MANDATORY GLOSSARY — ZERO EXCEPTIONS:
-The terms below MUST be translated exactly as specified. Do NOT leave them in English, do NOT invent alternatives. Substitute every occurrence before writing any other word.
+The terms below MUST be translated exactly as specified. Do NOT leave them in the source language, do NOT invent alternatives. Substitute every occurrence before writing any other word.
 
 <glossary>
 {glossary_block}
@@ -51,7 +60,7 @@ OUTPUT FORMAT:
 Translate the ENTIRE source text — every paragraph, every sentence, every line of dialogue. Do not summarize, do not stop early.
 Respond strictly with a single JSON object and nothing else. No markdown fences, no commentary. The object must match this schema exactly:
 {{
-  "translated_text": "Complete Turkish translation of the full source text, preserving paragraph breaks with \\n\\n.",
+  "translated_text": "Complete {target_name} translation of the full source text, preserving paragraph breaks with \\n\\n.",
   "editor_notes": ["Brief notes on tricky choices or cultural adaptations. Empty array if none."]
 }}"""
 
@@ -62,12 +71,15 @@ def _render_glossary(terms: Iterable[GlossaryTerm]) -> str:
 
 
 def build_system_prompt(
-    style_guide: str | None,
+    book: Book,
     glossary: Iterable[GlossaryTerm],
     scene_context: str | None,
 ) -> str:
     return SYSTEM_PROMPT_TEMPLATE.format(
-        style_guide=style_guide or "(no style guide provided)",
+        source_name=language_name(book.source_language),
+        target_name=language_name(book.target_language),
+        stage1_rules_block=stage1_rules_block(book.target_language),
+        style_guide=book.style_guide or "(no style guide provided)",
         glossary_block=_render_glossary(glossary),
         scene_context=scene_context or "(no scene context provided)",
     )
@@ -75,12 +87,12 @@ def build_system_prompt(
 
 # --- Stage 2 (Artist): literary refinement of the Stage 1 draft -------------
 
-STAGE2_SYSTEM_PROMPT_TEMPLATE = """You are an elite Turkish literary editor. You receive an English source passage and a faithful but mechanical Turkish draft. Your job is to rewrite the Turkish so it reads as natural, evocative, publication-quality literary Turkish — while preserving the exact meaning, tense, and structure of the English source.
+STAGE2_SYSTEM_PROMPT_TEMPLATE = """You are an elite {target_name} literary editor. You receive a {source_name} source passage and a faithful but mechanical {target_name} draft. Your job is to rewrite the {target_name} so it reads as natural, evocative, publication-quality literary prose — while preserving the exact meaning, tense, and structure of the {source_name} source.
 
 EDITING RULES:
-- Eliminate "translationese": remove overused passive voice, "tarafından", "sahip olmak", "bunun hakkında", and any calqued English sentence structures. Recast as idiomatic, flowing Turkish.
-- Preserve meaning: do NOT add, drop, or reinterpret content. The English source is ground truth; the Turkish draft is a starting point you may freely rephrase.
-- Character Voice: dialogue must sound like something a real native Turkish speaker would actually say, matching the tone, register, and mood of the scene.
+{stage2_rules_block}
+- Preserve meaning: do NOT add, drop, or reinterpret content. The {source_name} source is ground truth; the {target_name} draft is a starting point you may freely rephrase.
+- Character Voice: dialogue must sound like something a real native {target_name} speaker would actually say, matching the tone, register, and mood of the scene.
 - Keep paragraph breaks (use \\n\\n between paragraphs).
 - Proper Nouns: keep character, place, and brand names exactly as in the source unless the glossary specifies otherwise.
 
@@ -89,7 +101,7 @@ EDITING RULES:
 </style_guide>
 
 MANDATORY GLOSSARY — ZERO EXCEPTIONS:
-The terms below MUST appear translated exactly as specified and MUST survive your edit unchanged. Do NOT revert them to English or substitute alternatives.
+The terms below MUST appear translated exactly as specified and MUST survive your edit unchanged. Do NOT revert them to the source language or substitute alternatives.
 
 <glossary>
 {glossary_block}
@@ -103,18 +115,21 @@ OUTPUT FORMAT:
 Refine the ENTIRE draft — every paragraph, every line of dialogue. Do not summarize, do not stop early.
 Respond strictly with a single JSON object and nothing else. No markdown fences, no commentary. The object must match this schema exactly:
 {{
-  "translated_text": "The refined literary Turkish translation of the full passage, preserving paragraph breaks with \\n\\n.",
+  "translated_text": "The refined literary {target_name} translation of the full passage, preserving paragraph breaks with \\n\\n.",
   "editor_notes": ["Brief notes on what you changed and why. Empty array if none."]
 }}"""
 
 
 def build_stage2_system_prompt(
-    style_guide: str | None,
+    book: Book,
     glossary: Iterable[GlossaryTerm],
     scene_context: str | None,
 ) -> str:
     return STAGE2_SYSTEM_PROMPT_TEMPLATE.format(
-        style_guide=style_guide or "(no style guide provided)",
+        source_name=language_name(book.source_language),
+        target_name=language_name(book.target_language),
+        stage2_rules_block=stage2_rules_block(book.target_language),
+        style_guide=book.style_guide or "(no style guide provided)",
         glossary_block=_render_glossary(glossary),
         scene_context=scene_context or "(no scene context provided)",
     )
@@ -195,10 +210,8 @@ async def _run_two_stage(
     `stage1_model` / `stage2_model` are per-request overrides; each falls back to
     the matching .env default when None.
     """
-    style_guide = book.style_guide
-
-    # Stage 1 — Builder: faithful EN->TR. Per-request model overrides the default.
-    stage1_system = build_system_prompt(style_guide, glossary, chunk.scene_context)
+    # Stage 1 — Builder: faithful source->target. Per-request model overrides the default.
+    stage1_system = build_system_prompt(book, glossary, chunk.scene_context)
     stage1_user = f"<source_text>\n{chunk.source_text}\n</source_text>"
     s1_model = stage1_model or settings.OLLAMA_STAGE1_MODEL
     s1_provider = get_provider(provider=provider_name, model=s1_model)
@@ -209,10 +222,10 @@ async def _run_two_stage(
 
     # Stage 2 — Artist: literary refinement of the Stage 1 draft.
     try:
-        stage2_system = build_stage2_system_prompt(style_guide, glossary, chunk.scene_context)
+        stage2_system = build_stage2_system_prompt(book, glossary, chunk.scene_context)
         stage2_user = (
-            f"<english_source>\n{chunk.source_text}\n</english_source>\n\n"
-            f"<turkish_draft>\n{s1.translated_text}\n</turkish_draft>"
+            f"<source_text>\n{chunk.source_text}\n</source_text>\n\n"
+            f"<draft_translation>\n{s1.translated_text}\n</draft_translation>"
         )
         s2_model = stage2_model or settings.OLLAMA_STAGE2_MODEL
         s2_provider = get_provider(provider=provider_name, model=s2_model)
@@ -329,7 +342,6 @@ async def translate_book_batched(
             logger.warning("translate_book_batched: book %s not found", book_id)
             return
         glossary = list(db.query(GlossaryTerm).filter_by(book_id=book_id).all())
-        style_guide = book.style_guide
 
         all_chunks = (
             db.query(Chunk)
@@ -355,7 +367,7 @@ async def translate_book_batched(
         )
         for chunk in pending:
             try:
-                system_prompt = build_system_prompt(style_guide, glossary, chunk.scene_context)
+                system_prompt = build_system_prompt(book, glossary, chunk.scene_context)
                 user_prompt = f"<source_text>\n{chunk.source_text}\n</source_text>"
                 out = await s1_provider.generate_json(
                     system_prompt, user_prompt, TranslationOutput
@@ -400,11 +412,11 @@ async def translate_book_batched(
         for chunk in stage1_done:
             try:
                 stage2_system = build_stage2_system_prompt(
-                    style_guide, glossary, chunk.scene_context
+                    book, glossary, chunk.scene_context
                 )
                 stage2_user = (
-                    f"<english_source>\n{chunk.source_text}\n</english_source>\n\n"
-                    f"<turkish_draft>\n{chunk.translated_text}\n</turkish_draft>"
+                    f"<source_text>\n{chunk.source_text}\n</source_text>\n\n"
+                    f"<draft_translation>\n{chunk.translated_text}\n</draft_translation>"
                 )
                 out = await s2_provider.generate_json(
                     stage2_system, stage2_user, TranslationOutput
@@ -459,9 +471,7 @@ async def translate_chunk(
                     stage2_model=stage2_model,
                 )
             else:
-                system_prompt = build_system_prompt(
-                    book.style_guide, glossary, chunk.scene_context
-                )
+                system_prompt = build_system_prompt(book, glossary, chunk.scene_context)
                 user_prompt = f"<source_text>\n{chunk.source_text}\n</source_text>"
                 single_model = model or settings.OLLAMA_MODEL
                 provider = get_provider(provider=provider_name, model=single_model)

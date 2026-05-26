@@ -4,29 +4,34 @@ This file gives Claude Code (or any AI assistant) the context it needs to work p
 
 ## Project
 
-**BookFlow** is an AI-assisted literary translation tool. Users upload a book in EPUB, PDF, DOCX, or TXT format. The backend parses the text, splits it into translation-friendly chunks, and translates each chunk from English into Turkish using a local Ollama model (with optional OpenRouter support). Every chunk preserves a glossary, a per-book style guide, and an optional per-chunk scene context.
+**BookFlow** is an AI-assisted literary translation tool. Users upload a book in EPUB, PDF, DOCX, or TXT format. The backend parses the text, splits it into translation-friendly chunks, and translates each chunk between a configurable **source / target language pair** using a local Ollama model (with optional OpenRouter support). Every chunk preserves a glossary, a per-book style guide, and an optional per-chunk scene context.
 
-Target output is **literary** Turkish — not a literal word-for-word rendering. The system prompt explicitly forbids "translationese" patterns (overuse of `tarafından`, `sahip olmak`, passive constructions, calqued idioms).
+Source language is **auto-detected at upload time** (lingua-py first, Ollama LLM fallback when lingua's confidence is below 0.7); the user can override before saving. Target language is picked from a curated dropdown of 8 literary languages: Turkish, English, French, German, Spanish, Russian, Italian, Portuguese. The pair is **fixed per book** (stored as `books.source_language` / `books.target_language`).
+
+Target output is **literary** — not a literal word-for-word rendering. Per-language prompt rules in `app/services/llm/lang_rules.py` forbid the translationese patterns typical of each target (e.g. for Turkish: overuse of `tarafından`, `sahip olmak`, passive constructions, calqued idioms). Languages without tuned rules fall back to a generic anti-calque block.
 
 ## Repository layout
 
 ```
 book-flow/
-├── main.py                          FastAPI entrypoint
+├── main.py                          FastAPI entrypoint (runs Alembic upgrade in lifespan)
+├── alembic.ini                      Alembic config (sqlalchemy.url is overridden in env.py)
+├── migrations/                      Alembic env + versions/
 ├── requirements.txt
 ├── .env.example                     Copy to .env to override defaults
 ├── bookflow.db                      SQLite, auto-created on first run
 ├── app/
 │   ├── core/config.py               pydantic-settings, reads .env
 │   ├── db/                          SQLAlchemy 2.0 sync engine + session
-│   ├── models/                      Book, Chunk (+ ChunkStatus), GlossaryTerm
-│   ├── schemas/                     Pydantic request/response schemas
-│   ├── api/endpoints/               books, chunks, glossary, models
+│   ├── models/                      Book, Chunk (+ ChunkStatus), GlossaryTerm, TranslationVersion
+│   ├── schemas/                     Pydantic request/response schemas (incl. language.py)
+│   ├── api/endpoints/               books, chunks, glossary, languages, models
 │   └── services/
 │       ├── ingest/                  epub/pdf/docx/txt parsers + dispatcher
-│       ├── chunker.py               Paragraph-aware splitter
+│       ├── chunker.py               Paragraph-aware splitter (Unicode-aware sentence split)
+│       ├── lang_detect.py           Source-language detection (lingua + LLM fallback)
 │       ├── translator.py            Background-task orchestrator
-│       └── llm/                     Provider abstraction (Ollama, OpenRouter stub)
+│       └── llm/                     Provider abstraction + lang_rules.py registry
 └── frontend/                        Vite + React + TypeScript + Tailwind UI
     └── src/
         ├── api.ts                   Typed fetch client
@@ -105,12 +110,12 @@ Stop everything: `docker compose down`. Wipe DB too: `docker compose down -v`.
 
 ## Key data model
 
-- `books` — title, author, style_guide (text), total_chunks, created_at
+- `books` — title, author, style_guide (text), source_language (ISO 639-1, e.g. `en`), target_language (ISO 639-1, e.g. `tr`), total_chunks, created_at. The language pair is fixed at creation and **immutable** post-create (the PATCH schema deliberately omits the fields).
 - `chunks` — book_id FK (cascade), sequence_number (unique per book), source_text, translated_text (nullable), status (`raw` | `in_review` | `approved`), editor_notes (JSON-encoded list of strings), scene_context (nullable), active_version_id (nullable FK → translation_versions; the chosen version, mirrored into translated_text)
 - `translation_versions` — chunk_id FK (cascade), translated_text, editor_notes (JSON list), pipeline (`single`|`two_stage`), stage1_model, stage2_model, created_at. One row per translation run; lets the user compare/revert. `chunk.translated_text` always mirrors the active version, so export/UI need no version awareness.
 - `glossary_terms` — book_id FK (cascade), source_term, target_term (unique per book + source)
 
-Schema is created via `Base.metadata.create_all` in the FastAPI `lifespan`. **No Alembic migrations yet** — if you change a model, delete `bookflow.db` and let it recreate, or add Alembic.
+Schema is managed by **Alembic**. The FastAPI `lifespan` runs `alembic upgrade head` programmatically on startup, so the dev flow stays one command. Migration revisions live in `migrations/versions/`. To make a schema change: edit the SQLAlchemy model, then add a new revision file (e.g. `migrations/versions/0003_<change>.py`). Existing DBs upgrade in place; no `bookflow.db` delete needed.
 
 ## API surface
 
@@ -118,8 +123,10 @@ Mounted in `main.py`:
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/books` | Create a book by JSON. |
-| POST | `/api/books/upload` | Multipart upload, parse, auto-chunk, persist. |
+| POST | `/api/books` | Create a book by JSON. Requires `source_language` + `target_language`. |
+| POST | `/api/books/upload` | Multipart upload, parse, auto-chunk, persist. `target_language` is required; `source_language` is optional (server auto-detects via `app/services/lang_detect.py` if omitted). |
+| GET | `/api/languages` | List the curated supported target languages (8 entries). |
+| POST | `/api/languages/detect` | Body `{ "text": "..." }`. Returns `{code, confidence, method}`. lingua-py first, LLM fallback if confidence < 0.7. Used by the upload form to pre-fill the source-language dropdown. |
 | GET / PATCH / DELETE | `/api/books/{id}` | CRUD. |
 | GET | `/api/books` | List all. |
 | POST | `/api/books/{book_id}/chunks` | Bulk insert chunks manually. |
@@ -146,8 +153,8 @@ Mounted in `main.py`:
 
 Two sequential LLM passes. `OLLAMA_STAGE1_MODEL` / `OLLAMA_STAGE2_MODEL` are **empty by default** — the model must be picked per request (UI shows two `ModelPicker`s); the translate endpoints return 400 if no model resolves.
 
-1. **Stage 1 — Builder**: faithful EN→TR translation, fidelity over polish. Reuses `build_system_prompt`.
-2. **Stage 2 — Artist**: receives the English source **and** the Stage 1 Turkish draft, rewrites it into literary Turkish, strips translationese. Uses `build_stage2_system_prompt`. Both stages emit the same `TranslationOutput` schema.
+1. **Stage 1 — Builder**: faithful source→target translation, fidelity over polish. Reuses `build_system_prompt`, which reads `book.source_language` / `book.target_language` and resolves the per-language rule block from `app/services/llm/lang_rules.py`.
+2. **Stage 2 — Artist**: receives the source passage **and** the Stage 1 draft, rewrites the draft into literary target-language prose, strips translationese. Uses `build_stage2_system_prompt` (same language-pair resolution). Both stages emit the same `TranslationOutput` schema.
 
 **Two execution modes (by endpoint):**
 
@@ -171,17 +178,24 @@ Both paths share `_persist_translation` (ratio check + notes + status + commit) 
 ## Coding conventions
 
 - Python: 3.13, type-annotated, SQLAlchemy 2.0 `Mapped[...]` style, Pydantic 2 (`model_config = ConfigDict(...)`). Avoid `from __future__ import annotations` unless needed.
-- All user-facing strings and docs in **English**. The translation **output** is Turkish — never translate prompts, comments, identifiers, or UI labels.
+- All user-facing strings and docs in **English**. The translation **output** is whatever target language the book was created with — never translate prompts, comments, identifiers, or UI labels.
 - Frontend: React 18 functional components, TypeScript strict mode, Tailwind utility classes. No state library — `useState` + `useEffect` are sufficient.
 - The Vite dev server proxies `/api` to the backend, so the frontend always uses relative paths.
 
+## Languages & prompt rules
+
+- Supported target languages live in `SUPPORTED_TARGETS` in `app/schemas/language.py` (currently TR, EN, FR, DE, ES, RU, IT, PT). To add one: append a `LangOption` here AND a `LangRules(...)` entry in `app/services/llm/lang_rules.py`.
+- Per-language Stage 1 / Stage 2 rule blocks are optional. Languages without tuned rules (`es`, `ru`, `it`, `pt` today) use `GENERIC_STAGE1_RULES` / `GENERIC_STAGE2_RULES`. Add tuned rules only after observing real translationese patterns on output.
+- Source detection: `app/services/lang_detect.py` uses lingua-py with confidence threshold 0.7; below that, falls back to the configured LLM with a tiny JSON-mode classify prompt. Cached at module load.
+
 ## What's intentionally out of scope (v1)
 
-- Alembic migrations
 - Auth / multi-user
 - Streaming translation responses
 - Rate limiting / retry budgets beyond the one-shot Pydantic-fail retry
 - Export to translated EPUB/PDF
 - OpenRouter (stub only — raises `LLMProviderError`)
+- Per-language chapter-detection regex in the frontend (current mixed EN/TR list is heuristic-only)
+- Glossary language-pair scoping (book already pins the pair)
 
 When you add any of these, update this file in the same PR.
