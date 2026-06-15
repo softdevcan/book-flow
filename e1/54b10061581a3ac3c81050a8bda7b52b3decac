@@ -1,0 +1,19 @@
+scripts/git-ai-demo-sample.py
+  s_072ecc2072d9f2::t_2287a3bce946c4 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "e154b10061581a3ac3c81050a8bda7b52b3decac",
+  "prompts": {},
+  "sessions": {
+    "s_072ecc2072d9f2": {
+      "agent_id": {
+        "tool": "mock_ai",
+        "id": "ai-thread-1781512242980200400",
+        "model": "unknown"
+      },
+      "human_author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  }
+}
