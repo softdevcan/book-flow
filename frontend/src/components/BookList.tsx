@@ -4,6 +4,12 @@ import { api } from "../api";
 import type { Book } from "../types";
 import { UploadForm } from "./UploadForm";
 
+function formatLibrarySummary(count: number): string {
+  if (count === 0) return "Kütüphanede henüz kitap yok";
+  if (count === 1) return "Kütüphanende 1 kitap var";
+  return `${count} kitap var kütüphanende`;
+}
+
 interface Props {
   onOpen: (id: number) => void;
 }
@@ -54,6 +60,9 @@ export function BookList({ onOpen }: Props) {
           Upload an EPUB, PDF, DOCX or TXT file. BookFlow will parse it, split
           it into translation-friendly chunks, and let you translate them
           chunk-by-chunk into your target language.
+        </p>
+        <p className="text-xs text-slate-600 dark:text-slate-400 mb-5 font-medium">
+          {formatLibrarySummary(books.length)}
         </p>
 
         {error && (

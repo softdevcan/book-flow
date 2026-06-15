@@ -73,6 +73,12 @@ function chapterStatus(group: ChapterGroup): "all_approved" | "partial" | "untra
   return "untranslated";
 }
 
+/*
+Bu satırlar git ai aracını deneyimlemek için oluşturuldu.
+
+bu satırlar git ai status sonuucunu etkilemeli.
+*/
+
 // Coalesce rapid SSE toasts: if > 5 events in 2s, collapse to one summary.
 function makeToastCoalescer() {
   let buffer: string[] = [];

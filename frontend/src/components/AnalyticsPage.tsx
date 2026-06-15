@@ -9,6 +9,28 @@ function wordCount(text: string): number {
   return text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
 }
 
+function formatPct(value: number): string {
+  return `${Math.min(100, Math.max(0, value))}%`;
+}
+
+function velocityTone(pct: number): string {
+  if (pct >= 90) return "text-emerald-400 dark:text-emerald-400 font";
+  if (pct >= 30) return "text-indigo-400 dark:text-indigo-400 font-medium";
+  return "text-amber-400 dark:text-amber-400 font-medium";
+}
+
+function reviewHealthLabel(approved: number, inReview: number, raw: number): string {
+  const pending = inReview + raw;
+  if (pending === 0) return "Review copmlete";
+  if (approved > pending) return "Healthy pace — more approved than pending";
+  return `${pending} chunks still need attention`;
+}
+/* Review health summary 
+merhaba bu bir yorum satırı
+
+bu satır git ai aracını deneyimlemek içiz yazıldı.
+
+*/
 function StatusBadge({ label, count, color }: { label: string; count: number; color: string }) {
   return (
     <div className={`rounded-lg border p-4 flex flex-col gap-1 ${color}`}>
@@ -58,6 +80,7 @@ export function AnalyticsPage({ book, chunks }: Props) {
       ? ((translatedTargetWords / translatedSourceWords) * 100).toFixed(1)
       : null;
 
+  const reviewHealth = reviewHealthLabel(approved, inReview, raw);
   const barMax = Math.max(...sourceCounts, 1);
 
   const last10 = chunks.slice(-10);
@@ -69,7 +92,8 @@ export function AnalyticsPage({ book, chunks }: Props) {
       <div>
         <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">{book.title}</h2>
         <p className="text-sm text-slate-400 dark:text-slate-500">
-          {book.author ?? "Unknown author"} · Translation analytics
+          {book.author ?? "Bilinmeyen Yazar"} · Translation analytics ·{" "}
+          {formatPct(progressPct)} translated
         </p>
       </div>
 
@@ -84,7 +108,7 @@ export function AnalyticsPage({ book, chunks }: Props) {
             />
           </div>
           <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 shrink-0 w-12 text-right">
-            {progressPct}%
+            {formatPct(progressPct)}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -95,12 +119,21 @@ export function AnalyticsPage({ book, chunks }: Props) {
             />
           </div>
           <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 shrink-0 w-12 text-right">
-            {approvalPct}% <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">approved</span>
+            {formatPct(approvalPct)}{" "}
+            <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">approved</span>
           </span>
         </div>
         <p className="text-xs text-slate-400 dark:text-slate-500">
           {translated} of {chunks.length} chunks translated · {approved} approved
         </p>
+      </div>
+
+            {/* Review health summary */}
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-4 py-3 flex items-center justify-between gap-4">
+        <p className="text-sm text-slate-600 dark:text-slate-300">{reviewHealth}</p>
+        <span className={`text-xs shrink-0 ${velocityTone(velocityPct)}`}>
+          Last 10: {formatPct(velocityPct)}
+        </span>
       </div>
 
       {/* Status cards */}
@@ -131,8 +164,8 @@ export function AnalyticsPage({ book, chunks }: Props) {
         <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>
             Last 10 chunks:{" "}
-            <span className={velocityPct >= 80 ? "text-emerald-600 dark:text-emerald-400 font-medium" : velocityPct >= 40 ? "text-indigo-600 dark:text-indigo-400 font-medium" : "text-amber-600 dark:text-amber-400 font-medium"}>
-              {last10Approved}/{last10.length} approved ({velocityPct}%)
+            <span className={velocityTone(velocityPct)}>
+              {last10Approved}/{last10.length} approved ({formatPct(velocityPct)})
             </span>
           </span>
           <span>{chunks.length} total chunks</span>
