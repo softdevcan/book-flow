@@ -20,6 +20,14 @@ interface Props {
   onEditHandled?: () => void;
 }
 
+/*
+1
+2
+3
+4
+5
+*/
+
 const statusStyles: Record<ChunkStatus, string> = {
   raw: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   in_review: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
