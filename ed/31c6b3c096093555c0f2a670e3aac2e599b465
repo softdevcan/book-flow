@@ -1,0 +1,30 @@
+frontend/src/components/AnalyticsPage.tsx
+  s_5bbe9bd6b7d240::t_e1f679a5b42dba 12-16,20-21
+  s_5bbe9bd6b7d240::t_0439fedcf24784 96
+  s_5bbe9bd6b7d240::t_82d4db9f71c8c1 122-123
+  s_5bbe9bd6b7d240::t_d49f340a02cf8e 167-168
+scripts/git-ai-demo.ps1
+  s_5bbe9bd6b7d240::t_4dd784d8f18188 1-4,7-153
+  s_5bbe9bd6b7d240::t_3386d0b06a2b10 5-6
+frontend/src/components/BookList.tsx
+  s_5bbe9bd6b7d240::t_bb46ab1b89a21d 7,11-12
+  s_5bbe9bd6b7d240::t_fa810495fc8f1c 65
+scripts/git-ai-demo.cmd
+  s_5bbe9bd6b7d240::t_416990ba6742df 1-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "ed31c6b3c096093555c0f2a670e3aac2e599b465",
+  "prompts": {},
+  "sessions": {
+    "s_5bbe9bd6b7d240": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ea5fb95d-8503-44ae-b512-5633595e0007",
+        "model": "composer-2.5"
+      },
+      "human_author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  }
+}
