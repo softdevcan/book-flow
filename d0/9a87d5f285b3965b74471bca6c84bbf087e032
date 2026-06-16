@@ -1,0 +1,28 @@
+app/api/endpoints/books.py
+  h_a6c0dc4039e953 35-43
+frontend/src/components/ChunkCard.tsx
+  s_7c37be7ca1d6ab::t_a2023496b42c2a 1
+app/api/endpoints/chunks.py
+  h_a6c0dc4039e953 37-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "d09a87d5f285b3965b74471bca6c84bbf087e032",
+  "prompts": {},
+  "humans": {
+    "h_a6c0dc4039e953": {
+      "author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_7c37be7ca1d6ab": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45d19912-4e9e-4cde-9e51-7da6e43a80a9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  }
+}
