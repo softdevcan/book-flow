@@ -32,6 +32,10 @@ export function GlossaryPanel({ bookId }: Props) {
     },
     [bookId],
   );
+  /*
+  merhaba,
+  bu bir human kodudur.
+  */
 
   useEffect(() => {
     void load();
