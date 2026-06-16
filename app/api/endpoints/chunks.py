@@ -34,7 +34,15 @@ class TranslateRequest(BaseModel):
 
 router = APIRouter(tags=["chunks"])
 
-
+"""
+1   
+2   
+3   
+4   
+5   
+6   
+7
+"""
 def _require_models(req: TranslateRequest) -> None:
     """Reject a translate request whose pipeline has no model to run with.
 

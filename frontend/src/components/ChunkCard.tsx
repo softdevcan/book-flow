@@ -1,3 +1,4 @@
+// TODO: add collapsible source text toggle for long chunks
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../api";
