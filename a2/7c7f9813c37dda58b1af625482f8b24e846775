@@ -1,0 +1,14 @@
+frontend/src/components/GlossaryPanel.tsx
+  h_a6c0dc4039e953 35-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "a27c7f9813c37dda58b1af625482f8b24e846775",
+  "prompts": {},
+  "humans": {
+    "h_a6c0dc4039e953": {
+      "author": "softdevcan <akyildirimcan@gmail.com>"
+    }
+  }
+}
